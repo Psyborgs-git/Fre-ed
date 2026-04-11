@@ -118,7 +118,7 @@ function InputLayer({ progress }) {
 function OutputLayer({ progress }) {
   const meshRef = useRef();
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     if (meshRef.current?.material) {
       meshRef.current.material.emissiveIntensity = 0.2 + progress * 0.6;
     }

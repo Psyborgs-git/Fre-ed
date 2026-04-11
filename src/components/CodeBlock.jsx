@@ -9,8 +9,6 @@ export default function CodeBlock({ children, language, filename }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    // Extract text content from the children (handles nested <code> elements)
-    const el = document.createElement('div');
     // children may be a React element; convert to text via innerText trick
     const text =
       typeof children === 'string'
