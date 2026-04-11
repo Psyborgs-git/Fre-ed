@@ -100,8 +100,13 @@ function LayerConnections({ fromLayer, toLayer, fromPosns, toPosns, progress, co
 
 // ── Forward-pass wave: a bright sphere travelling across layers ───────
 
+/**
+ * The wave sphere travels from layer 0 to layer L-1.
+ * As it passes each layer, a brief emissive flash is applied via the
+ * waveFlash prop passed down to Neuron.  The flash value peaks to 1
+ * when waveT matches that layer's normalised position and decays fast.
+ */
 function ForwardPassWave({ progress }) {
-  const ref = useRef();
   // Wave starts at 60% scroll and traverses the network by 95%
   const waveT = Math.max(0, Math.min(1, (progress - 0.6) / 0.35));
   if (waveT < 0.01) return null;
@@ -111,7 +116,7 @@ function ForwardPassWave({ progress }) {
   const x = firstX + (lastX - firstX) * waveT;
 
   return (
-    <mesh ref={ref} position={[x, 0, 0.3]}>
+    <mesh position={[x, 0, 0.3]}>
       <sphereGeometry args={[0.12, 16, 16]} />
       <meshStandardMaterial
         color="#ffffff"
@@ -124,16 +129,54 @@ function ForwardPassWave({ progress }) {
   );
 }
 
+// ── Layer flash — brief white-hot spike when the wave passes ──────────
+
+function LayerFlash({ layerIdx, progress }) {
+  const meshRef = useRef();
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
+  const layerNorm = layerIdx / (LAYERS.length - 1);
+  const height = LAYERS[layerIdx].count * 0.85 + 0.3;
+
+  useFrame(() => {
+    if (!meshRef.current) return;
+    const waveT = Math.max(0, Math.min(1, (progressRef.current - 0.6) / 0.35));
+    // Flash when wave is within 0.12 of this layer's normalised position
+    const dist = Math.abs(waveT - layerNorm);
+    const flash = Math.max(0, 1 - dist / 0.12);
+    meshRef.current.material.opacity = flash * 0.18;
+  });
+
+  return (
+    <mesh ref={meshRef} position={[LAYERS[layerIdx].x, 0, 0.25]}>
+      <planeGeometry args={[0.25, height]} />
+      <meshStandardMaterial
+        color="#ffffff"
+        emissive="#ffffff"
+        emissiveIntensity={1}
+        transparent
+        opacity={0}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
 // ── XOR decision boundary plane (appears near end of scroll) ─────────
 
 function DecisionBoundary({ progress }) {
   const ref = useRef();
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   const t = Math.max(0, Math.min(1, (progress - 0.75) / 0.25));
 
   useFrame(() => {
     if (!ref.current) return;
-    ref.current.material.opacity = t * 0.12;
-    ref.current.rotation.z = t * Math.PI * 0.08;
+    const tt = Math.max(0, Math.min(1, (progressRef.current - 0.75) / 0.25));
+    ref.current.material.opacity = tt * 0.12;
+    ref.current.rotation.z = tt * Math.PI * 0.08;
   });
 
   if (t < 0.01) return null;
@@ -179,9 +222,13 @@ function LayerLabel({ x, label, progress, showAt }) {
 // ── Camera gentle drift ───────────────────────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
-    const targetZ = 7.5 + progress * 1.8;
-    const targetY = progress * 0.5;
+    const p = progressRef.current;
+    const targetZ = 7.5 + p * 1.8;
+    const targetY = p * 0.5;
     camera.position.z += (targetZ - camera.position.z) * 0.04;
     camera.position.y += (targetY - camera.position.y) * 0.04;
     camera.lookAt(0, 0, 0);
@@ -248,6 +295,11 @@ function SceneContent() {
 
       {/* Forward-pass travelling pulse */}
       <ForwardPassWave progress={progress} />
+
+      {/* Layer flash — white-hot ring when the wave passes */}
+      {LAYERS.map((_, li) => (
+        <LayerFlash key={`f-${li}`} layerIdx={li} progress={progress} />
+      ))}
 
       {/* Decision boundary hint */}
       <DecisionBoundary progress={progress} />

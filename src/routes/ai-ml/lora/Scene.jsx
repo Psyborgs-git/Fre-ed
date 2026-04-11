@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
@@ -141,27 +142,54 @@ function MultiplyLines({ progress }) {
   const t = Math.max(0, (progress - 0.42) / 0.25);
   if (t < 0.02) return null;
 
-  // Show 2 lines from each A column to each B row (rank-2 bottleneck)
-  const lines = [];
+  // Two rank nodes positioned at the bottleneck midpoint (x = 0)
+  // Lines go from each A's rightmost column position to each B's leftmost column position
+  const rankLines = [];
   for (let r = 0; r < 2; r++) {
-    // A column r: at position in A grid — rightmost two columns
-    const aPos = gridPos(4, r, A_ROWS, A_COLS, A_GAP, -3.2, 0);
-    // B row r: leftmost two rows
+    // A matrix rightmost column (A_COLS - 1 = 1), centre row of this rank index
+    const aRow = Math.floor(A_ROWS / 2) - 1 + r; // rows 3 and 4
+    const aPos = gridPos(aRow, A_COLS - 1, A_ROWS, A_COLS, A_GAP, -3.2, 0);
+    // B matrix leftmost column (0), each rank row
     const bPos = gridPos(r, 0, B_ROWS, B_COLS, B_GAP, 3.2, 0);
-    lines.push({ from: aPos, to: bPos, key: r });
+    // Bottleneck midpoint
+    const midY = (aPos[1] + bPos[1]) / 2;
+    rankLines.push({ aPos, bPos, midY, key: r });
   }
 
   return (
     <group>
-      {lines.map(({ from, to, key }) => (
-        <Line
-          key={key}
-          points={[from, [0, (from[1] + to[1]) / 2, 0.2], to]}
-          color="#f59e0b"
-          lineWidth={2}
-          transparent
-          opacity={t * 0.7}
-        />
+      {rankLines.map(({ aPos, bPos, midY, key }) => (
+        <group key={key}>
+          {/* A → bottleneck node */}
+          <Line
+            points={[aPos, [0, midY, 0.3]]}
+            color="#f59e0b"
+            lineWidth={2}
+            transparent
+            opacity={t * 0.7}
+          />
+          {/* Bottleneck node → B */}
+          <Line
+            points={[[0, midY, 0.3], bPos]}
+            color="#f59e0b"
+            lineWidth={2}
+            transparent
+            opacity={t * 0.7}
+          />
+          {/* Rank-node sphere at the bottleneck */}
+          <mesh position={[0, midY, 0.3]}>
+            <sphereGeometry args={[0.09, 14, 14]} />
+            <meshStandardMaterial
+              color="#f59e0b"
+              emissive="#f59e0b"
+              emissiveIntensity={t * 0.9}
+              roughness={0.3}
+              metalness={0.4}
+              transparent
+              opacity={t}
+            />
+          </mesh>
+        </group>
       ))}
     </group>
   );
@@ -170,9 +198,13 @@ function MultiplyLines({ progress }) {
 // ── Camera ────────────────────────────────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
-    const targetZ = 7 + progress * 2.5;
-    const targetY = progress * 0.5;
+    const p = progressRef.current;
+    const targetZ = 7 + p * 2.5;
+    const targetY = p * 0.5;
     camera.position.z += (targetZ - camera.position.z) * 0.04;
     camera.position.y += (targetY - camera.position.y) * 0.04;
     camera.lookAt(0, 0, 0);

@@ -140,7 +140,8 @@ function Connections({ fromIdx, toIdx, fromPosns, toPosns, progress }) {
 // ── Forward-pass pulse ────────────────────────────────────────────────
 
 function ForwardPulse({ progress }) {
-  const t = Math.max(0, Math.min(1, progress / 0.45));
+  // Delayed start (0.05) so the pulse never races ahead of the connections
+  const t = Math.max(0, Math.min(1, (progress - 0.05) / 0.4));
   if (t < 0.01) return null;
 
   const firstX = LAYERS[0].x;
@@ -236,10 +237,14 @@ function LossLine({ progress }) {
 // ── Camera ────────────────────────────────────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
+    const p = progressRef.current;
     // Shift camera right during forward pass, back left during gradient pass
-    const targetX = progress < 0.5 ? progress * 1.0 : (1 - progress) * 1.0;
-    const targetZ = 7.5 + progress * 1.5;
+    const targetX = p < 0.5 ? p * 1.0 : (1 - p) * 1.0;
+    const targetZ = 7.5 + p * 1.5;
     camera.position.x += (targetX - camera.position.x) * 0.04;
     camera.position.z += (targetZ - camera.position.z) * 0.04;
     camera.lookAt(0, 0, 0);

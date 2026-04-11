@@ -23,9 +23,13 @@ function expertPos(i) {
 
 function InputToken({ progress }) {
   const ref = useRef();
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ clock }) => {
     if (!ref.current) return;
-    ref.current.material.emissiveIntensity = 0.2 + Math.sin(clock.getElapsedTime() * 2) * 0.1 * Math.min(progress * 3, 1);
+    const p = progressRef.current;
+    ref.current.material.emissiveIntensity = 0.2 + Math.sin(clock.getElapsedTime() * 2) * 0.1 * Math.min(p * 3, 1);
   });
   return (
     <mesh ref={ref} position={[-3.5, 0, 0]}>
@@ -45,12 +49,16 @@ function InputToken({ progress }) {
 
 function Router({ progress }) {
   const ref = useRef();
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
   const t = Math.max(0, (progress - 0.15) / 0.3);
 
   useFrame(() => {
     if (!ref.current) return;
     ref.current.rotation.y += 0.01;
-    ref.current.material.emissiveIntensity = t * 0.5;
+    ref.current.material.emissiveIntensity = progressRef.current > 0.15
+      ? Math.max(0, (progressRef.current - 0.15) / 0.3) * 0.5
+      : 0;
   });
 
   return (
@@ -190,9 +198,13 @@ function InputLine({ progress }) {
 // ── Camera ────────────────────────────────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
-    const targetX = progress * 1.5;
-    const targetZ = 9 + progress * 1.5;
+    const p = progressRef.current;
+    const targetX = p * 1.5;
+    const targetZ = 9 + p * 1.5;
     camera.position.x += (targetX - camera.position.x) * 0.04;
     camera.position.z += (targetZ - camera.position.z) * 0.04;
     camera.lookAt(1, 0, 0);
