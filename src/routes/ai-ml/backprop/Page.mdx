@@ -1,0 +1,288 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## The learning problem
+
+A neural network learns by adjusting its weights $W$ to minimise a **loss function**
+$\mathcal{L}$ that measures how wrong its predictions are. The core question is:
+
+> *For each weight $w_{ij}$, how much does changing it by a tiny amount change the loss?*
+
+The answer — the partial derivative $\partial \mathcal{L} / \partial w_{ij}$ — is the
+**gradient**. Once we have all gradients, we update weights via **gradient descent**:
+
+$$
+w \;\leftarrow\; w - \eta \,\frac{\partial \mathcal{L}}{\partial w}
+$$
+
+**Backpropagation** is the algorithm for computing all those gradients efficiently,
+in a single backwards pass through the network.
+
+The 3D scene encodes this in colour:
+
+| Colour | Meaning |
+|---|---|
+| Cyan signal (→) | Forward pass: data flows input → output |
+| Red sphere (right) | Loss $\mathcal{L}$ computed from output vs. target |
+| Amber signal (←) | Backward pass: gradients flow output → input |
+
+<Callout type="note">
+Watch the scene as you scroll — a cyan pulse travels left → right (forward pass),
+then a red loss sphere appears, and finally an amber pulse sweeps right → left
+(gradient backpropagation). Each neuron glows amber once its gradient is computed.
+</Callout>
+
+## The chain rule — the engine of backprop
+
+Backpropagation is **the chain rule of calculus** applied recursively. If a function
+$L$ depends on $y$ which depends on $x$:
+
+$$
+\frac{dL}{dx} = \frac{dL}{dy} \cdot \frac{dy}{dx}
+$$
+
+In a neural network, every layer is a differentiable function. Composing them:
+
+$$
+\mathbf{a}^{(l)} = \sigma\!\left(W^{(l)}\,\mathbf{a}^{(l-1)} + \mathbf{b}^{(l)}\right)
+$$
+
+The chain rule lets us propagate gradients backwards through any composition of
+differentiable functions, which is exactly what a neural network is.
+
+## Forward pass — build the computation graph
+
+Before we can compute gradients, we do a **forward pass** and **cache intermediate
+values**. These cached values are needed during backpropagation.
+
+<CodeBlock language="python">
+{`import numpy as np
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def sigmoid_grad(z):
+    s = sigmoid(z)
+    return s * (1 - s)
+
+def relu(z):
+    return np.maximum(0, z)
+
+def relu_grad(z):
+    return (z > 0).astype(float)
+
+class Layer:
+    def __init__(self, in_dim, out_dim):
+        # Xavier initialisation for sigmoid / tanh
+        std = np.sqrt(2 / (in_dim + out_dim))
+        self.W = np.random.randn(out_dim, in_dim) * std
+        self.b = np.zeros(out_dim)
+        # Caches for backprop
+        self.z = None   # pre-activation
+        self.a_prev = None  # input to this layer
+
+    def forward(self, a_prev, activation='relu'):
+        self.a_prev = a_prev
+        self.z = self.W @ a_prev + self.b
+        if activation == 'relu':
+            return relu(self.z)
+        return sigmoid(self.z)
+
+# Two-layer example
+l1 = Layer(2, 3)   # 2 inputs → 3 hidden
+l2 = Layer(3, 1)   # 3 hidden → 1 output
+
+x = np.array([0.5, 0.8])
+h = l1.forward(x, activation='relu')
+y_hat = l2.forward(h, activation='sigmoid')
+print("Output:", y_hat)`}
+</CodeBlock>
+
+## Backward pass — propagate gradients
+
+Starting from the loss, we compute gradients layer by layer, moving **right to left**.
+
+**Step 1 — Loss gradient:**
+
+For binary cross-entropy loss $\mathcal{L} = -[y \log \hat{y} + (1-y)\log(1-\hat{y})]$:
+
+$$
+\frac{\partial \mathcal{L}}{\partial \hat{y}} = -\frac{y}{\hat{y}} + \frac{1-y}{1-\hat{y}}
+$$
+
+For mean squared error $\mathcal{L} = \frac{1}{2}(\hat{y} - y)^2$:
+
+$$
+\frac{\partial \mathcal{L}}{\partial \hat{y}} = \hat{y} - y
+$$
+
+**Step 2 — Gradient through a layer:**
+
+For layer $l$ with pre-activation $\mathbf{z}^{(l)} = W^{(l)} \mathbf{a}^{(l-1)} + \mathbf{b}^{(l)}$:
+
+$$
+\delta^{(l)} = \frac{\partial \mathcal{L}}{\partial \mathbf{z}^{(l)}}
+= \left(\frac{\partial \mathcal{L}}{\partial \mathbf{a}^{(l)}}\right) \odot \sigma'\!\left(\mathbf{z}^{(l)}\right)
+$$
+
+$$
+\frac{\partial \mathcal{L}}{\partial W^{(l)}} = \delta^{(l)}\,\left(\mathbf{a}^{(l-1)}\right)^{\!\top}
+$$
+
+$$
+\frac{\partial \mathcal{L}}{\partial \mathbf{b}^{(l)}} = \delta^{(l)}
+$$
+
+$$
+\frac{\partial \mathcal{L}}{\partial \mathbf{a}^{(l-1)}} = \left(W^{(l)}\right)^{\!\top} \delta^{(l)}
+$$
+
+The last equation propagates the gradient to the **previous layer** — this is the
+chain rule in matrix form.
+
+<CodeBlock language="python">
+{`def backward(l1, l2, y_hat, y_true, x):
+    """
+    Manual backpropagation for a 2-layer network.
+    Returns (dW1, db1, dW2, db2) — gradients for weight update.
+    """
+    # ── Output layer gradients ───────────────────────────────────────
+    # dL/d(y_hat) for MSE loss
+    dL_dyhat = y_hat - y_true                          # shape: (1,)
+
+    # dL/dz2 = dL/d(y_hat) * sigmoid'(z2)
+    dL_dz2 = dL_dyhat * sigmoid_grad(l2.z)            # shape: (1,)
+
+    dW2 = np.outer(dL_dz2, l2.a_prev)                 # shape: (1, 3)
+    db2 = dL_dz2                                       # shape: (1,)
+
+    # ── Propagate gradient back through l2 weights ───────────────────
+    dL_da1 = l2.W.T @ dL_dz2                          # shape: (3,)
+
+    # ── Hidden layer gradients ───────────────────────────────────────
+    dL_dz1 = dL_da1 * relu_grad(l1.z)                 # shape: (3,)
+
+    dW1 = np.outer(dL_dz1, l1.a_prev)                 # shape: (3, 2)
+    db1 = dL_dz1                                       # shape: (3,)
+
+    return dW1, db1, dW2, db2
+
+# Training step
+lr = 0.1
+y_true = np.array([1.0])
+
+for step in range(100):
+    # Forward
+    h = l1.forward(x, 'relu')
+    y_hat = l2.forward(h, 'sigmoid')
+    loss = 0.5 * (y_hat - y_true) ** 2
+
+    # Backward
+    dW1, db1, dW2, db2 = backward(l1, l2, y_hat, y_true, x)
+
+    # Gradient descent update
+    l1.W -= lr * dW1
+    l1.b -= lr * db1
+    l2.W -= lr * dW2
+    l2.b -= lr * db2
+
+    if step % 20 == 0:
+        print(f"Step {step:3d}  loss={loss[0]:.6f}")`}
+</CodeBlock>
+
+## The vanishing gradient problem
+
+When gradients flow backwards through many layers, each step multiplies by
+$\sigma'(z)$. For sigmoid, $\sigma'(z) \leq 0.25$. After 10 layers:
+
+$$
+\delta^{(1)} \sim \left(0.25\right)^{10} \delta^{(10)} \approx 10^{-6} \delta^{(10)}
+$$
+
+The gradient at the first layer is a **million times smaller** than at the output.
+Early weights barely update — the network struggles to learn.
+
+**Solutions:**
+- **ReLU activation** — gradient is exactly 1 for $z > 0$; no shrinkage
+- **Residual connections** (skip connections in ResNets) — provide a gradient highway
+- **Layer normalisation** — keeps activations in a well-behaved range
+- **Careful initialisation** — He init for ReLU, Xavier for sigmoid/tanh
+
+<Callout type="warning">
+The vanishing gradient problem is why deep networks with sigmoid activations failed
+throughout the 1990s and early 2000s. ReLU, introduced widely in the 2010s, was a
+critical enabling technology for modern deep learning.
+</Callout>
+
+## Automatic differentiation — how frameworks do it
+
+Modern frameworks (PyTorch, JAX) implement **automatic differentiation** (autograd)
+rather than hand-coded backward passes. Every operation records how to compute its
+own gradient, building a **computation graph** during the forward pass.
+
+<CodeBlock language="python">
+{`import torch
+import torch.nn as nn
+
+# PyTorch handles backprop automatically
+model = nn.Sequential(
+    nn.Linear(2, 3),
+    nn.ReLU(),
+    nn.Linear(3, 1),
+    nn.Sigmoid(),
+)
+
+x = torch.tensor([0.5, 0.8], requires_grad=False)
+y_true = torch.tensor([1.0])
+
+# Forward pass — PyTorch records computation graph
+y_hat = model(x)
+loss = nn.MSELoss()(y_hat, y_true)
+
+# Backward pass — autograd computes all gradients automatically
+loss.backward()
+
+# Gradients are stored in .grad attributes
+for name, param in model.named_parameters():
+    print(f"{name}: grad shape = {param.grad.shape}")
+
+# Update weights
+optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+optimizer.step()
+optimizer.zero_grad()`}
+</CodeBlock>
+
+## Mini-batch gradient descent
+
+In practice, computing gradients on the full dataset is slow. Instead, we use
+**mini-batches** — small random subsets of the data.
+
+$$
+\nabla_W \mathcal{L}_{\text{batch}} = \frac{1}{B} \sum_{i=1}^{B} \nabla_W \ell\!\left(f(x_i;\,W),\,y_i\right)
+$$
+
+| Method | Batch size | Gradient quality | Speed |
+|---|---|---|---|
+| Full batch GD | All $N$ samples | Exact, low noise | Slow, memory-heavy |
+| Mini-batch SGD | 32–512 samples | Slightly noisy, stable | Fast, GPU-friendly |
+| Stochastic GD | 1 sample | Very noisy | Fastest per step, unstable |
+
+Mini-batch SGD is the standard. The noise in gradient estimates acts as a
+**regulariser** — it prevents the optimiser from settling into sharp minima
+and nudges it toward flatter, more generalisable ones.
+
+## Summary
+
+$$
+\text{Forward: } \mathbf{x} \xrightarrow{\;f^{(1)}\;} \mathbf{a}^{(1)} \xrightarrow{\;f^{(2)}\;} \cdots \xrightarrow{\;f^{(L)}\;} \hat{y} \xrightarrow{\;\mathcal{L}\;} \text{loss}
+$$
+
+$$
+\text{Backward: } \frac{\partial \mathcal{L}}{\partial W^{(L)}} \leftarrow \frac{\partial \mathcal{L}}{\partial W^{(L-1)}} \leftarrow \cdots \leftarrow \frac{\partial \mathcal{L}}{\partial W^{(1)}}
+$$
+
+- Backpropagation = chain rule applied recursively from loss to inputs.
+- Each layer needs to store its pre-activation $\mathbf{z}$ during the forward pass.
+- Gradients w.r.t. weights: $\partial \mathcal{L}/\partial W^{(l)} = \delta^{(l)} (\mathbf{a}^{(l-1)})^\top$.
+- Vanishing gradients are solved by ReLU activations, residuals, and good initialisation.
+- Modern frameworks automate everything with autograd — you only write the forward pass.

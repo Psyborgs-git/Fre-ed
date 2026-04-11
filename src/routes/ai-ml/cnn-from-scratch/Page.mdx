@@ -1,0 +1,265 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Why not just use an MLP for images?
+
+A 224×224 RGB image has $224 \times 224 \times 3 = 150{,}528$ values. A fully-connected
+layer that maps this to 512 hidden units needs **77 million weights** — just for one
+layer, before training even begins.
+
+Worse, a fully-connected layer treats pixel $(0,0)$ and pixel $(100,100)$ as completely
+independent features. It has no notion of **spatial proximity** — the crucial fact that
+nearby pixels are more related than distant ones.
+
+**Convolutional Neural Networks** solve both problems with two structural constraints:
+1. **Local connectivity** — each neuron sees only a small patch of the input
+2. **Weight sharing** — the same filter is applied at every position
+
+The result: massively fewer parameters, and built-in translation invariance.
+
+The 3D scene shows the full pipeline:
+
+| Object | Meaning |
+|---|---|
+| 7×7 blue pixel grid | Input image (brightness encoded as colour) |
+| Amber 3×3 sliding box | The convolutional filter (kernel) |
+| 5×5 cyan feature map | Output of one conv layer (valid convolution) |
+| Smaller pooled map | After 2×2 max pooling |
+| Amber output sphere | Predicted class (highest activation) |
+
+<Callout type="note">
+Watch the amber filter slide across the input image. Each position computes a dot product
+between the filter weights and the pixel patch beneath it — filling in one cell of the
+feature map. The brightest cells show where the edge detector "fired."
+</Callout>
+
+## The convolution operation
+
+A **filter** (or kernel) $F \in \mathbb{R}^{k \times k}$ slides across an input
+$X \in \mathbb{R}^{H \times W}$ with stride $s$, computing a dot product at each position:
+
+$$
+(X \star F)[i, j] = \sum_{m=0}^{k-1} \sum_{n=0}^{k-1} X[i \cdot s + m,\; j \cdot s + n] \cdot F[m, n]
+$$
+
+Output size (with valid padding, stride 1):
+
+$$
+H_{\text{out}} = H - k + 1, \quad W_{\text{out}} = W - k + 1
+$$
+
+For our 7×7 input and 3×3 filter: $H_{\text{out}} = 7 - 3 + 1 = 5$.
+
+**Parameter count comparison:**
+
+| Layer | Input size | Output | Params |
+|---|---|---|---|
+| FC (dense) | $7 \times 7 = 49$ | 25 units | $49 \times 25 = 1{,}225$ |
+| Conv (3×3, 1 filter) | $7 \times 7$ | $5 \times 5$ | $3 \times 3 + 1 = 10$ |
+
+**Same task, 122× fewer parameters** — and the conv filter is reused at all 25 positions.
+
+<CodeBlock language="python">
+{`import numpy as np
+
+def conv2d(X, F, stride=1, padding=0):
+    """
+    2D convolution (cross-correlation in ML conventions).
+    X: input  (H, W)
+    F: filter (k, k)
+    Returns feature map (H_out, W_out).
+    """
+    if padding > 0:
+        X = np.pad(X, padding, mode='constant')
+    H, W = X.shape
+    k = F.shape[0]
+    H_out = (H - k) // stride + 1
+    W_out = (W - k) // stride + 1
+    out = np.zeros((H_out, W_out))
+    for i in range(H_out):
+        for j in range(W_out):
+            patch = X[i*stride : i*stride+k, j*stride : j*stride+k]
+            out[i, j] = np.sum(patch * F)  # dot product
+    return out
+
+# Sobel horizontal edge detector
+sobel_h = np.array([
+    [-1, -2, -1],
+    [ 0,  0,  0],
+    [ 1,  2,  1],
+], dtype=float)
+
+# Synthetic input (7×7 gradient image)
+X = np.tile(np.linspace(0, 1, 7), (7, 1))
+feat = conv2d(X, sobel_h)
+print("Feature map shape:", feat.shape)  # (5, 5)
+print(feat.round(2))`}
+</CodeBlock>
+
+## Filters as feature detectors
+
+A single filter detects one type of feature. Different filters detect different things:
+
+| Filter type | What it detects |
+|---|---|
+| Sobel horizontal | Horizontal edges |
+| Sobel vertical | Vertical edges |
+| Gabor at 45° | Diagonal edges |
+| Gaussian | Smooth blobs |
+| Learned (random init) | Whatever minimises the loss |
+
+In practice we learn **many filters in parallel**. A layer with $C_{\text{out}}$ filters
+produces a feature map of shape $(C_{\text{out}}, H_{\text{out}}, W_{\text{out}})$:
+
+$$
+\text{Output}[c, i, j] = \text{ReLU}\!\left(\sum_{c_{\text{in}}} (X_{c_{\text{in}}} \star F_{c, c_{\text{in}}})[i,j] + b_c\right)
+$$
+
+The total parameter count for one conv layer:
+$C_{\text{out}} \times C_{\text{in}} \times k \times k + C_{\text{out}}$ (bias).
+
+For a 3×3 conv with 32 input channels and 64 output channels:
+$64 \times 32 \times 9 + 64 = 18{,}496$ parameters.
+
+## Padding and stride
+
+**Padding** — adding zeros around the input border — controls output size:
+
+$$
+H_{\text{out}} = \left\lfloor \frac{H + 2p - k}{s} \right\rfloor + 1
+$$
+
+| Padding | $p = 0$ (valid) | $p = (k-1)/2$ (same) |
+|---|---|---|
+| Output size | Shrinks: $H - k + 1$ | Same as input: $H$ |
+| Use case | Reduce spatial size | Preserve spatial size |
+
+**Stride** $s > 1$ sub-samples the output, reducing spatial resolution by a factor of $s$.
+Stride-2 conv is often used instead of max pooling to downsample while learning the
+downsampling weights.
+
+<CodeBlock language="python">
+{`# PyTorch conv layer
+import torch
+import torch.nn as nn
+
+# 32 input channels, 64 output channels, 3×3 kernel, same padding
+conv = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+print(f"Params: {sum(p.numel() for p in conv.parameters()):,}")  # 18,496
+
+x = torch.randn(1, 32, 28, 28)   # batch=1, channels=32, 28×28
+y = conv(x)
+print(f"Output: {y.shape}")       # torch.Size([1, 64, 28, 28])  — same padding`}
+</CodeBlock>
+
+## Pooling — spatial downsampling
+
+**Max pooling** takes the maximum value in each non-overlapping window, aggressively
+reducing spatial resolution while preserving the strongest activations:
+
+$$
+\text{MaxPool}[i,j] = \max_{m,n \in [0,p)} X[i \cdot p + m,\; j \cdot p + n]
+$$
+
+A 2×2 max pool halves both spatial dimensions: $5 \times 5 \to 2 \times 2$.
+
+<CodeBlock language="python">
+{`def max_pool2d(X, pool_size=2):
+    """2D max pooling (no overlap, stride = pool_size)."""
+    H, W = X.shape
+    p = pool_size
+    H_out, W_out = H // p, W // p
+    out = np.zeros((H_out, W_out))
+    for i in range(H_out):
+        for j in range(W_out):
+            out[i, j] = X[i*p : i*p+p, j*p : j*p+p].max()
+    return out
+
+pooled = max_pool2d(feat)
+print("Pooled shape:", pooled.shape)  # (2, 2)`}
+</CodeBlock>
+
+## Building a complete CNN
+
+Here's a minimal but complete CNN for 28×28 greyscale digit classification:
+
+<CodeBlock language="python">
+{`import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class SmallCNN(nn.Module):
+    def __init__(self, num_classes=10):
+        super().__init__()
+        # Conv block 1: 1→16 channels, spatial 28→14
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        self.pool1 = nn.MaxPool2d(2)  # 28→14
+
+        # Conv block 2: 16→32 channels, spatial 14→7
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.pool2 = nn.MaxPool2d(2)  # 14→7
+
+        # Fully-connected classifier
+        self.fc1 = nn.Linear(32 * 7 * 7, 128)
+        self.fc2 = nn.Linear(128, num_classes)
+
+    def forward(self, x):                     # x: (B, 1, 28, 28)
+        x = F.relu(self.conv1(x))            # (B, 16, 28, 28)
+        x = self.pool1(x)                    # (B, 16, 14, 14)
+        x = F.relu(self.conv2(x))            # (B, 32, 14, 14)
+        x = self.pool2(x)                    # (B, 32,  7,  7)
+        x = x.flatten(1)                     # (B, 32*7*7 = 1568)
+        x = F.relu(self.fc1(x))              # (B, 128)
+        return self.fc2(x)                   # (B, 10)  — raw logits
+
+model = SmallCNN()
+total = sum(p.numel() for p in model.parameters())
+print(f"Total parameters: {total:,}")        # ≈ 225,354
+print(f"vs. equiv. MLP:   {28*28*128 + 128 + 128*10:,}") # ≈ 101,770 (much wider needed)`}
+</CodeBlock>
+
+<Callout type="tip">
+Add **batch normalisation** after each conv layer (`nn.BatchNorm2d`) and use
+**dropout** before the final FC layer (`nn.Dropout(0.5)`) to regularise the model.
+These two additions reliably improve both training stability and test accuracy.
+</Callout>
+
+## The feature hierarchy
+
+Why do CNNs work so well for vision? They naturally build a **feature hierarchy**:
+
+| Depth | What the filters detect |
+|---|---|
+| Layer 1 | Edges, colour gradients, Gabor-like textures |
+| Layer 2 | Corners, curves, simple patterns |
+| Layer 3 | Object parts (wheels, eyes, snouts) |
+| Layer 4+ | Full object shapes, poses |
+
+This was visualised empirically by Zeiler & Fergus (2014) using deconvolution networks.
+The hierarchy emerges **without supervision** — it is a consequence of stacking local
+convolutional operations and training end-to-end with backpropagation.
+
+Modern architectures (ResNet, EfficientNet, ConvNeXt) all build on this core idea,
+adding residual connections, depth-wise separable convolutions, and scaled compound
+coefficients — but the fundamental operation remains the sliding dot product between
+a learned filter and a local input patch.
+
+## Summary
+
+$$
+\underbrace{X}_{\text{image}}
+\xrightarrow{\;\star F^{(1)}\;}
+\underbrace{\text{ReLU}(\cdot)}_{\text{feature map}}
+\xrightarrow{\;\text{pool}\;}
+\underbrace{X'}_{\text{downsampled}}
+\xrightarrow{\;\star F^{(2)}\;}
+\cdots
+\xrightarrow{\;\text{FC}\;}
+\underbrace{\hat{y}}_{\text{class scores}}
+$$
+
+- Convolution = sliding dot product between a learned filter and local input patches.
+- Weight sharing gives translation invariance; local connectivity reduces parameters.
+- Multiple filters per layer learn multiple features simultaneously.
+- Pooling reduces spatial resolution while preserving feature strength.
+- The feature hierarchy — edges → parts → objects — emerges naturally from stacking layers.

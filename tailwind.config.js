@@ -8,19 +8,20 @@ export default {
     extend: {
       colors: {
         bg: {
-          base: '#0a0a0f',
-          elev: '#15151d',
+          base: 'var(--bg-base)',
+          elev: 'var(--bg-elev)',
+          scene: 'var(--bg-scene)',
         },
         ink: {
-          hi: '#f5f5f7',
-          lo: '#9a9aa8',
+          hi: 'var(--ink-hi)',
+          lo: 'var(--ink-lo)',
         },
         accent: {
-          cyan: '#22d3ee',
-          violet: '#a78bfa',
-          warn: '#f59e0b',
+          cyan: 'var(--accent-cyan)',
+          violet: 'var(--accent-violet)',
+          warn: 'var(--accent-warn)',
         },
-        line: '#26262f',
+        line: 'var(--line)',
       },
       fontFamily: {
         display: ['Space Grotesk', 'Inter', 'sans-serif'],
@@ -37,7 +38,7 @@ export default {
       typography: {
         DEFAULT: {
           css: {
-            color: '#f5f5f7',
+            color: 'var(--ink-hi)',
             maxWidth: '72ch',
           },
         },

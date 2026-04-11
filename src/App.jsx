@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ScrollProvider } from './lib/ScrollContext.jsx';
+import { ThemeProvider } from './lib/ThemeContext.jsx';
 import Nav from './components/Nav.jsx';
 import Footer from './components/Footer.jsx';
 
@@ -17,27 +18,35 @@ import Moe from './routes/ai-ml/moe/index.jsx';
 import Rag from './routes/ai-ml/rag/index.jsx';
 import Lora from './routes/ai-ml/lora/index.jsx';
 import FineTuning from './routes/ai-ml/fine-tuning/index.jsx';
+import Mlp from './routes/ai-ml/mlp/index.jsx';
+import Backprop from './routes/ai-ml/backprop/index.jsx';
+import Cnn from './routes/ai-ml/cnn-from-scratch/index.jsx';
 
 export default function App() {
   return (
     <BrowserRouter>
-      <ScrollProvider>
-        <Nav />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/ai-ml" element={<AiMl />} />
-          <Route path="/intro-to-linear-algebra" element={<IntroToLinearAlgebra />} />
-          <Route path="/ai-ml/perceptron" element={<Perceptron />} />
-          <Route path="/ai-ml/transformer" element={<Transformer />} />
-          <Route path="/ai-ml/moe" element={<Moe />} />
-          <Route path="/ai-ml/rag" element={<Rag />} />
-          <Route path="/ai-ml/lora" element={<Lora />} />
-          <Route path="/ai-ml/fine-tuning" element={<FineTuning />} />
-        </Routes>
-        <Footer />
-      </ScrollProvider>
+      <ThemeProvider>
+        <ScrollProvider>
+          <Nav />
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/ai-ml" element={<AiMl />} />
+            <Route path="/intro-to-linear-algebra" element={<IntroToLinearAlgebra />} />
+            <Route path="/ai-ml/perceptron" element={<Perceptron />} />
+            <Route path="/ai-ml/transformer" element={<Transformer />} />
+            <Route path="/ai-ml/moe" element={<Moe />} />
+            <Route path="/ai-ml/rag" element={<Rag />} />
+            <Route path="/ai-ml/lora" element={<Lora />} />
+            <Route path="/ai-ml/fine-tuning" element={<FineTuning />} />
+            <Route path="/ai-ml/mlp" element={<Mlp />} />
+            <Route path="/ai-ml/backprop" element={<Backprop />} />
+            <Route path="/ai-ml/cnn-from-scratch" element={<Cnn />} />
+          </Routes>
+          <Footer />
+        </ScrollProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }
