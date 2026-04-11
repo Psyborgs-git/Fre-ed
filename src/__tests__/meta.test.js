@@ -5,6 +5,10 @@
 import { describe, it, expect } from 'vitest';
 import { meta as linearAlgebra }  from '../routes/ai-ml/intro-to-linear-algebra/meta.js';
 import { meta as perceptron }     from '../routes/ai-ml/perceptron/meta.js';
+import { meta as mlp }            from '../routes/ai-ml/mlp/meta.js';
+import { meta as backprop }       from '../routes/ai-ml/backprop/meta.js';
+import { meta as cnn }            from '../routes/ai-ml/cnn-from-scratch/meta.js';
+import { meta as attention }      from '../routes/ai-ml/attention/meta.js';
 import { meta as transformer }    from '../routes/ai-ml/transformer/meta.js';
 import { meta as moe }            from '../routes/ai-ml/moe/meta.js';
 import { meta as rag }            from '../routes/ai-ml/rag/meta.js';
@@ -12,13 +16,17 @@ import { meta as lora }           from '../routes/ai-ml/lora/meta.js';
 import { meta as fineTuning }     from '../routes/ai-ml/fine-tuning/meta.js';
 
 const ALL_META = [
-  { name: 'intro-to-linear-algebra', meta: linearAlgebra },
-  { name: 'ai-ml/perceptron',        meta: perceptron },
-  { name: 'ai-ml/transformer',       meta: transformer },
-  { name: 'ai-ml/moe',               meta: moe },
-  { name: 'ai-ml/rag',               meta: rag },
-  { name: 'ai-ml/lora',              meta: lora },
-  { name: 'ai-ml/fine-tuning',       meta: fineTuning },
+  { name: 'intro-to-linear-algebra',   meta: linearAlgebra },
+  { name: 'ai-ml/perceptron',          meta: perceptron },
+  { name: 'ai-ml/mlp',                 meta: mlp },
+  { name: 'ai-ml/backprop',            meta: backprop },
+  { name: 'ai-ml/cnn-from-scratch',    meta: cnn },
+  { name: 'ai-ml/attention',           meta: attention },
+  { name: 'ai-ml/transformer',         meta: transformer },
+  { name: 'ai-ml/moe',                 meta: moe },
+  { name: 'ai-ml/rag',                 meta: rag },
+  { name: 'ai-ml/lora',               meta: lora },
+  { name: 'ai-ml/fine-tuning',         meta: fineTuning },
 ];
 
 const REQUIRED_STRING_FIELDS = ['title', 'description', 'cover', 'published', 'updated', 'author', 'canonical'];

@@ -37,7 +37,7 @@ const ML_ROUTES = [
     path: '/ai-ml/attention',
     title: 'Self-Attention',
     desc: 'Token spheres, Query–Key dot products, and softmax heatmaps. The core of transformers.',
-    status: 'coming-soon',
+    status: 'live',
     tags: ['transformers', 'nlp'],
   },
   {

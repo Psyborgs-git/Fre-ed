@@ -7,6 +7,7 @@ import { meta as transformerMeta } from '../ai-ml/transformer/meta.js';
 import { meta as moeMeta } from '../ai-ml/moe/meta.js';
 import { meta as ragMeta } from '../ai-ml/rag/meta.js';
 import { meta as loraMeta } from '../ai-ml/lora/meta.js';
+import { meta as attentionMeta } from '../ai-ml/attention/meta.js';
 import { meta as fineTuningMeta } from '../ai-ml/fine-tuning/meta.js';
 import { meta as cnnMeta } from '../ai-ml/cnn-from-scratch/meta.js';
 
@@ -20,6 +21,7 @@ const ALL_POSTS = [
   { path: '/ai-ml/mlp', meta: mlpMeta },
   { path: '/ai-ml/backprop', meta: backpropMeta },
   { path: '/ai-ml/cnn-from-scratch', meta: cnnMeta },
+  { path: '/ai-ml/attention', meta: attentionMeta },
   { path: '/ai-ml/transformer', meta: transformerMeta },
   { path: '/ai-ml/moe', meta: moeMeta },
   { path: '/ai-ml/rag', meta: ragMeta },
