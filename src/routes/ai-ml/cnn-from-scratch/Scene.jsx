@@ -66,8 +66,6 @@ function InputGrid({ progress }) {
 // ── Sliding filter (3×3 kernel) ───────────────────────────────────────
 
 function SlidingFilter({ progress }) {
-  const ref = useRef();
-
   // Filter slides across the feature map during 20–65% scroll
   const slideT = Math.max(0, Math.min(1, (progress - 0.2) / 0.45));
   if (slideT < 0.01) return null;
@@ -84,14 +82,9 @@ function SlidingFilter({ progress }) {
   const cx = INPUT_X + (inputCol - (INPUT_SIZE - 1) / 2 + 1) * CELL;
   const cy = ((INPUT_SIZE - 1) / 2 - inputRow - 1) * CELL;
 
-  useFrame(() => {
-    if (!ref.current) return;
-    ref.current.position.x = cx;
-    ref.current.position.y = cy;
-  });
-
+  // Position is applied declaratively via the JSX prop — no useFrame needed.
   return (
-    <group ref={ref} position={[cx, cy, 0.1]}>
+    <group position={[cx, cy, 0.1]}>
       {/* 3×3 filter highlight */}
       {Array.from({ length: FILTER_SIZE }, (_, fr) =>
         Array.from({ length: FILTER_SIZE }, (_, fc) => {
@@ -283,10 +276,14 @@ function StageConnectors({ progress }) {
 // ── Camera ────────────────────────────────────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
     // Gradually pan right as stages are revealed
-    const targetX = progress * 2.5;
-    const targetZ = 8 + progress * 1.5;
+    const p = progressRef.current;
+    const targetX = p * 2.5;
+    const targetZ = 8 + p * 1.5;
     camera.position.x += (targetX - camera.position.x) * 0.04;
     camera.position.z += (targetZ - camera.position.z) * 0.04;
     camera.lookAt(targetX * 0.4, 0, 0);

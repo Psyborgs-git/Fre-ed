@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -118,68 +118,69 @@ function FineTunedSphere({ progress }) {
 
 // ── Gradient arrows ────────────────────────────────────────────────
 
+// Static raw arrow definitions — defined once outside the component
+const ARROW_DEFS_RAW = [
+  { from: [-0.9, lossHeight(-0.9, -1.0) + 0.15, -1.0], dir: [0.4, -0.1, 0.3] },
+  { from: [-0.3, lossHeight(-0.3, -0.5) + 0.15, -0.5], dir: [0.4, -0.08, 0.35] },
+  { from: [ 0.3, lossHeight( 0.3,  0.0) + 0.15,  0.0], dir: [0.35, -0.06, 0.4] },
+  { from: [ 0.8, lossHeight( 0.8,  0.5) + 0.15,  0.5], dir: [0.25, -0.04, 0.3] },
+];
+
 function GradientArrows({ progress }) {
   const t = Math.max(0, (progress - 0.42) / 0.2);
   if (t < 0.02) return null;
 
-  // 4 arrows pointing downhill from mid-path positions
-  const arrowDefs = [
-    { from: [-0.9, lossHeight(-0.9, -1.0) + 0.15, -1.0], dir: [0.4, -0.1, 0.3] },
-    { from: [-0.3, lossHeight(-0.3, -0.5) + 0.15, -0.5], dir: [0.4, -0.08, 0.35] },
-    { from: [ 0.3, lossHeight( 0.3,  0.0) + 0.15,  0.0], dir: [0.35, -0.06, 0.4] },
-    { from: [ 0.8, lossHeight( 0.8,  0.5) + 0.15,  0.5], dir: [0.25, -0.04, 0.3] },
-  ];
+  // Pre-compute all Three.js objects once (they don't change)
+  const arrows = useMemo(() => {
+    const length = 0.45;
+    return ARROW_DEFS_RAW.map(({ from, dir }) => {
+      const origin = new THREE.Vector3(...from);
+      const direction = new THREE.Vector3(...dir).normalize();
+      const shaftEnd = origin.clone().addScaledVector(direction, length * 0.75);
+      const shaftPositions = new Float32Array([
+        origin.x, origin.y, origin.z,
+        shaftEnd.x, shaftEnd.y, shaftEnd.z,
+      ]);
+      const headEnd = origin.clone().addScaledVector(direction, length);
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        direction
+      );
+      return { headPos: headEnd.toArray(), quaternion, shaftPositions };
+    });
+  }, []); // no deps — ARROW_DEFS_RAW is module-level constant
 
   return (
     <group>
-      {arrowDefs.map(({ from, dir }, i) => {
-        const origin = new THREE.Vector3(...from);
-        const direction = new THREE.Vector3(...dir).normalize();
-        const length = 0.45;
-
-        // Shaft
-        const shaftEnd = origin.clone().addScaledVector(direction, length * 0.75);
-        const shaftPoints = [origin.toArray(), shaftEnd.toArray()];
-
-        // Head (small cone tip direction)
-        const headEnd = origin.clone().addScaledVector(direction, length);
-
-        return (
-          <group key={i}>
-            {/* Shaft line */}
-            <line>
-              <bufferGeometry>
-                <bufferAttribute
-                  attach="attributes-position"
-                  args={[new Float32Array([...shaftPoints[0], ...shaftPoints[1]]), 3]}
-                />
-              </bufferGeometry>
-              <lineBasicMaterial
-                color="#f59e0b"
-                transparent
-                opacity={t * 0.85}
+      {arrows.map(({ headPos, quaternion, shaftPositions }, i) => (
+        <group key={i}>
+          {/* Shaft line */}
+          <line>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                args={[shaftPositions, 3]}
               />
-            </line>
-            {/* Arrowhead cone */}
-            <mesh
-              position={headEnd.toArray()}
-              quaternion={new THREE.Quaternion().setFromUnitVectors(
-                new THREE.Vector3(0, 1, 0),
-                direction
-              )}
-            >
-              <coneGeometry args={[0.055, 0.18, 8]} />
-              <meshStandardMaterial
-                color="#f59e0b"
-                emissive="#f59e0b"
-                emissiveIntensity={t * 0.6}
-                transparent
-                opacity={t * 0.9}
-              />
-            </mesh>
-          </group>
-        );
-      })}
+            </bufferGeometry>
+            <lineBasicMaterial
+              color="#f59e0b"
+              transparent
+              opacity={t * 0.85}
+            />
+          </line>
+          {/* Arrowhead cone */}
+          <mesh position={headPos} quaternion={quaternion}>
+            <coneGeometry args={[0.055, 0.18, 8]} />
+            <meshStandardMaterial
+              color="#f59e0b"
+              emissive="#f59e0b"
+              emissiveIntensity={t * 0.6}
+              transparent
+              opacity={t * 0.9}
+            />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }
@@ -225,11 +226,15 @@ function OptimPath({ progress }) {
 // ── Camera ────────────────────────────────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
+    const p = progressRef.current;
     // Drift from angled overview → birds-eye
-    const targetZ = 7 - progress * 1.5;
-    const targetY = 5 + progress * 2.5;
-    const targetX = -0.5 + progress * 0.5;
+    const targetZ = 7 - p * 1.5;
+    const targetY = 5 + p * 2.5;
+    const targetX = -0.5 + p * 0.5;
     camera.position.x += (targetX - camera.position.x) * 0.04;
     camera.position.y += (targetY - camera.position.y) * 0.04;
     camera.position.z += (targetZ - camera.position.z) * 0.04;

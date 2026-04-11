@@ -18,6 +18,13 @@ import Moe from './routes/ai-ml/moe/index.jsx';
 import Rag from './routes/ai-ml/rag/index.jsx';
 import Lora from './routes/ai-ml/lora/index.jsx';
 import FineTuning from './routes/ai-ml/fine-tuning/index.jsx';
+import Attention from './routes/ai-ml/attention/index.jsx';
+import Embeddings from './routes/ai-ml/embeddings/index.jsx';
+import Normalization from './routes/ai-ml/normalization/index.jsx';
+import Optimizers from './routes/ai-ml/optimizers/index.jsx';
+import Regularization from './routes/ai-ml/regularization/index.jsx';
+import RnnLstm from './routes/ai-ml/rnn-lstm/index.jsx';
+import Diffusion from './routes/ai-ml/diffusion/index.jsx';
 import Mlp from './routes/ai-ml/mlp/index.jsx';
 import Backprop from './routes/ai-ml/backprop/index.jsx';
 import Cnn from './routes/ai-ml/cnn-from-scratch/index.jsx';
@@ -41,6 +48,13 @@ export default function App() {
             <Route path="/ai-ml/lora" element={<Lora />} />
             <Route path="/ai-ml/fine-tuning" element={<FineTuning />} />
             <Route path="/ai-ml/mlp" element={<Mlp />} />
+            <Route path="/ai-ml/attention" element={<Attention />} />
+            <Route path="/ai-ml/embeddings" element={<Embeddings />} />
+            <Route path="/ai-ml/normalization" element={<Normalization />} />
+            <Route path="/ai-ml/optimizers" element={<Optimizers />} />
+            <Route path="/ai-ml/regularization" element={<Regularization />} />
+            <Route path="/ai-ml/rnn-lstm" element={<RnnLstm />} />
+            <Route path="/ai-ml/diffusion" element={<Diffusion />} />
             <Route path="/ai-ml/backprop" element={<Backprop />} />
             <Route path="/ai-ml/cnn-from-scratch" element={<Cnn />} />
           </Routes>

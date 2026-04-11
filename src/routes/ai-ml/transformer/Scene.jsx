@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
@@ -156,9 +156,13 @@ function FeedLines({ progress }) {
 // ── Camera ────────────────────────────────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
-    const targetZ = 8 + progress * 2;
-    const targetY = progress * 1.2;
+    const p = progressRef.current;
+    const targetZ = 8 + p * 2;
+    const targetY = p * 1.2;
     camera.position.z += (targetZ - camera.position.z) * 0.05;
     camera.position.y += (targetY - camera.position.y) * 0.05;
     camera.lookAt(0, 0, 0);

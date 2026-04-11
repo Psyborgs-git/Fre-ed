@@ -16,20 +16,23 @@ const INPUT_X = -2.6;
 function Neuron({ progress }) {
   const meshRef = useRef();
   const glowRef = useRef();
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
 
   useFrame(({ clock }) => {
     if (!meshRef.current) return;
     const t = clock.getElapsedTime();
+    const p = progressRef.current;
     // Pulse intensity scales with scroll progress
-    const pulse = 1 + Math.sin(t * 2.5) * 0.06 * progress;
+    const pulse = 1 + Math.sin(t * 2.5) * 0.06 * p;
     meshRef.current.scale.setScalar(pulse);
 
     // Emissive intensity driven by progress (neuron "activates")
     if (meshRef.current.material) {
-      meshRef.current.material.emissiveIntensity = 0.3 + progress * 0.7;
+      meshRef.current.material.emissiveIntensity = 0.3 + p * 0.7;
     }
     if (glowRef.current?.material) {
-      glowRef.current.material.opacity = 0.04 + progress * 0.08;
+      glowRef.current.material.opacity = 0.04 + p * 0.08;
     }
   });
 
@@ -117,10 +120,12 @@ function InputLayer({ progress }) {
 
 function OutputLayer({ progress }) {
   const meshRef = useRef();
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
 
   useFrame(() => {
     if (meshRef.current?.material) {
-      meshRef.current.material.emissiveIntensity = 0.2 + progress * 0.6;
+      meshRef.current.material.emissiveIntensity = 0.2 + progressRef.current * 0.6;
     }
   });
 
@@ -155,12 +160,15 @@ function OutputLayer({ progress }) {
 
 function DecisionBoundary({ progress }) {
   const meshRef = useRef();
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
 
   useFrame(() => {
     if (!meshRef.current) return;
+    const p = progressRef.current;
     // Plane tilts and opacity grows with progress
-    meshRef.current.rotation.z = progress * Math.PI * 0.15;
-    meshRef.current.material.opacity = 0.05 + progress * 0.1;
+    meshRef.current.rotation.z = p * Math.PI * 0.15;
+    meshRef.current.material.opacity = 0.05 + p * 0.1;
   });
 
   return (
@@ -180,10 +188,14 @@ function DecisionBoundary({ progress }) {
 // ── Scroll choreography: camera drift ────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
+    const p = progressRef.current;
     // Gradually pull back and tilt as user scrolls
-    const targetZ = 6 + progress * 1.5;
-    const targetY = progress * 0.8;
+    const targetZ = 6 + p * 1.5;
+    const targetY = p * 0.8;
     camera.position.z += (targetZ - camera.position.z) * 0.05;
     camera.position.y += (targetY - camera.position.y) * 0.05;
     camera.lookAt(0, 0, 0);

@@ -67,6 +67,8 @@ function DocCorpus({ progress }) {
 function QuerySphere({ progress }) {
   const ref = useRef();
   const glowRef = useRef();
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
@@ -74,7 +76,8 @@ function QuerySphere({ progress }) {
       ref.current.material.emissiveIntensity = 0.3 + Math.sin(t * 2) * 0.1;
     }
     if (glowRef.current?.material) {
-      glowRef.current.material.opacity = 0.04 + Math.min(progress * 0.08, 0.08);
+      const p = progressRef.current;
+      glowRef.current.material.opacity = 0.04 + Math.min(p * 0.08, 0.08);
     }
   });
 
@@ -190,9 +193,13 @@ function GenerationBox({ progress }) {
 // ── Camera ────────────────────────────────────────────────────────
 
 function CameraRig({ progress }) {
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
   useFrame(({ camera }) => {
-    const targetZ = 7 + progress * 2.5;
-    const targetY = progress * 0.8;
+    const p = progressRef.current;
+    const targetZ = 7 + p * 2.5;
+    const targetY = p * 0.8;
     camera.position.z += (targetZ - camera.position.z) * 0.04;
     camera.position.y += (targetY - camera.position.y) * 0.04;
     camera.lookAt(0, 0, 0);
