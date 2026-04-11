@@ -75,6 +75,48 @@ const ML_ROUTES = [
     status: 'live',
     tags: ['fine-tuning', 'rlhf', 'sft'],
   },
+  {
+    path: '/ai-ml/embeddings',
+    title: 'Embeddings',
+    desc: 'How discrete tokens become continuous vectors. Word2Vec, cosine similarity, king−man+woman=queen, and positional encodings.',
+    status: 'live',
+    tags: ['embeddings', 'nlp', 'word2vec'],
+  },
+  {
+    path: '/ai-ml/normalization',
+    title: 'Normalization',
+    desc: 'BatchNorm, LayerNorm, and RMSNorm — keeping activations well-behaved so deep networks can actually train.',
+    status: 'live',
+    tags: ['normalization', 'batch-norm', 'layer-norm'],
+  },
+  {
+    path: '/ai-ml/optimizers',
+    title: 'Optimizers',
+    desc: 'SGD vs Momentum vs Adam racing through the same loss landscape. Why adaptive learning rates win.',
+    status: 'live',
+    tags: ['optimizers', 'adam', 'training'],
+  },
+  {
+    path: '/ai-ml/regularization',
+    title: 'Dropout & Regularization',
+    desc: 'Randomly silence neurons during training to create an implicit ensemble. Dropout, L2 decay, and early stopping.',
+    status: 'live',
+    tags: ['regularization', 'dropout', 'overfitting'],
+  },
+  {
+    path: '/ai-ml/rnn-lstm',
+    title: 'RNN & LSTM',
+    desc: 'A hidden state that travels through time. How LSTMs use forget, input, and output gates to preserve long-range memory.',
+    status: 'live',
+    tags: ['rnn', 'lstm', 'sequences'],
+  },
+  {
+    path: '/ai-ml/diffusion',
+    title: 'Diffusion Models',
+    desc: 'Add noise until structure vanishes, then learn to reverse the process. DDPM, score matching, and latent diffusion.',
+    status: 'live',
+    tags: ['diffusion', 'generative-ai', 'ddpm'],
+  },
 ];
 
 const STATUS_BADGE = {

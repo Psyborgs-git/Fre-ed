@@ -9,6 +9,12 @@ import { meta as mlp }            from '../routes/ai-ml/mlp/meta.js';
 import { meta as backprop }       from '../routes/ai-ml/backprop/meta.js';
 import { meta as cnn }            from '../routes/ai-ml/cnn-from-scratch/meta.js';
 import { meta as attention }      from '../routes/ai-ml/attention/meta.js';
+import { meta as embeddings }     from '../routes/ai-ml/embeddings/meta.js';
+import { meta as normalization }  from '../routes/ai-ml/normalization/meta.js';
+import { meta as optimizers }     from '../routes/ai-ml/optimizers/meta.js';
+import { meta as regularization } from '../routes/ai-ml/regularization/meta.js';
+import { meta as rnnLstm }        from '../routes/ai-ml/rnn-lstm/meta.js';
+import { meta as diffusion }      from '../routes/ai-ml/diffusion/meta.js';
 import { meta as transformer }    from '../routes/ai-ml/transformer/meta.js';
 import { meta as moe }            from '../routes/ai-ml/moe/meta.js';
 import { meta as rag }            from '../routes/ai-ml/rag/meta.js';
@@ -22,6 +28,12 @@ const ALL_META = [
   { name: 'ai-ml/backprop',            meta: backprop },
   { name: 'ai-ml/cnn-from-scratch',    meta: cnn },
   { name: 'ai-ml/attention',           meta: attention },
+  { name: 'ai-ml/embeddings',          meta: embeddings },
+  { name: 'ai-ml/normalization',       meta: normalization },
+  { name: 'ai-ml/optimizers',          meta: optimizers },
+  { name: 'ai-ml/regularization',      meta: regularization },
+  { name: 'ai-ml/rnn-lstm',            meta: rnnLstm },
+  { name: 'ai-ml/diffusion',           meta: diffusion },
   { name: 'ai-ml/transformer',         meta: transformer },
   { name: 'ai-ml/moe',                 meta: moe },
   { name: 'ai-ml/rag',                 meta: rag },

@@ -8,6 +8,12 @@ import { meta as moeMeta } from '../ai-ml/moe/meta.js';
 import { meta as ragMeta } from '../ai-ml/rag/meta.js';
 import { meta as loraMeta } from '../ai-ml/lora/meta.js';
 import { meta as attentionMeta } from '../ai-ml/attention/meta.js';
+import { meta as embeddingsMeta } from '../ai-ml/embeddings/meta.js';
+import { meta as normalizationMeta } from '../ai-ml/normalization/meta.js';
+import { meta as optimizersMeta } from '../ai-ml/optimizers/meta.js';
+import { meta as regularizationMeta } from '../ai-ml/regularization/meta.js';
+import { meta as rnnLstmMeta } from '../ai-ml/rnn-lstm/meta.js';
+import { meta as diffusionMeta } from '../ai-ml/diffusion/meta.js';
 import { meta as fineTuningMeta } from '../ai-ml/fine-tuning/meta.js';
 import { meta as cnnMeta } from '../ai-ml/cnn-from-scratch/meta.js';
 
@@ -27,6 +33,12 @@ const ALL_POSTS = [
   { path: '/ai-ml/rag', meta: ragMeta },
   { path: '/ai-ml/lora', meta: loraMeta },
   { path: '/ai-ml/fine-tuning', meta: fineTuningMeta },
+  { path: '/ai-ml/embeddings', meta: embeddingsMeta },
+  { path: '/ai-ml/normalization', meta: normalizationMeta },
+  { path: '/ai-ml/optimizers', meta: optimizersMeta },
+  { path: '/ai-ml/regularization', meta: regularizationMeta },
+  { path: '/ai-ml/rnn-lstm', meta: rnnLstmMeta },
+  { path: '/ai-ml/diffusion', meta: diffusionMeta },
 ];
 
 const ALL_TAGS = [...new Set(ALL_POSTS.flatMap((p) => p.meta.tags ?? []))].sort();
