@@ -2,7 +2,51 @@ import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
-import { useScrollProgress } from '../../lib/ScrollContext.jsx';
+import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useTheme } from '../../../lib/ThemeContext.jsx';
+
+const SCENE_PALETTES = {
+  dark: {
+    background: '#060912',
+    fog: '#060912',
+    axisX: '#27d9ff',
+    axisY: '#9a7cff',
+    axisZ: '#f8fafc',
+    vector: '#ffb84d',
+    projection: '#ffd56a',
+    plane: '#4bd5ff',
+    planeGlow: '#7dd3fc',
+    gridCell: '#143447',
+    gridSection: '#1d4f66',
+    floorGlow: '#0c1d31',
+    origin: '#f8fafc',
+    originGlow: '#cbd5f5',
+    ambient: 0.42,
+    keyLight: '#52e3ff',
+    fillLight: '#9b8cff',
+    rimLight: '#f59e0b',
+  },
+  light: {
+    background: '#edf4ff',
+    fog: '#edf4ff',
+    axisX: '#0891b2',
+    axisY: '#7c3aed',
+    axisZ: '#1f2937',
+    vector: '#ea580c',
+    projection: '#f59e0b',
+    plane: '#38bdf8',
+    planeGlow: '#0ea5e9',
+    gridCell: '#bfd4e6',
+    gridSection: '#90b8d4',
+    floorGlow: '#d8e8ff',
+    origin: '#ffffff',
+    originGlow: '#dbeafe',
+    ambient: 0.66,
+    keyLight: '#38bdf8',
+    fillLight: '#8b5cf6',
+    rimLight: '#f97316',
+  },
+};
 
 // ── Helper: Arrow (vector visualisation) ─────────────────────────
 
@@ -13,25 +57,47 @@ function Arrow({ from = [0, 0, 0], to, color, lineWidth = 3 }) {
   }, [from, to]);
 
   const length = dir.length();
+  const normalizedDir = useMemo(() => {
+    if (length === 0) {
+      return new THREE.Vector3(0, 1, 0);
+    }
+
+    return dir.clone().normalize();
+  }, [dir, length]);
   const coneHeight = Math.min(0.25, length * 0.25);
   const conePos = useMemo(() => {
     const tip = new THREE.Vector3(...to);
-    const d = dir.clone().normalize();
-    return tip.sub(d.multiplyScalar(coneHeight / 2)).toArray();
-  }, [to, dir, coneHeight]);
+    return tip.sub(normalizedDir.clone().multiplyScalar(coneHeight / 2)).toArray();
+  }, [to, normalizedDir, coneHeight]);
 
   const coneQuat = useMemo(() => {
     const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normalizedDir);
     return q;
-  }, [dir]);
+  }, [normalizedDir]);
 
   return (
     <group>
       <Line points={[from, to]} color={color} lineWidth={lineWidth} />
       <mesh position={conePos} quaternion={coneQuat}>
         <coneGeometry args={[0.07, coneHeight, 12]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.6}
+          roughness={0.3}
+          metalness={0.1}
+        />
+      </mesh>
+      <mesh position={to}>
+        <sphereGeometry args={[0.05, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.9}
+          roughness={0.15}
+          metalness={0.08}
+        />
       </mesh>
     </group>
   );
@@ -39,7 +105,7 @@ function Arrow({ from = [0, 0, 0], to, color, lineWidth = 3 }) {
 
 // ── Basis vectors and a custom vector ────────────────────────────
 
-function VectorSpace({ progress }) {
+function VectorSpace({ progress, palette, shouldAnimate }) {
   const groupRef = useRef();
 
   // Custom vector that appears as scroll progresses
@@ -49,7 +115,7 @@ function VectorSpace({ progress }) {
   );
 
   useFrame(() => {
-    if (groupRef.current) {
+    if (shouldAnimate && groupRef.current) {
       // Gentle auto-rotation augmented by scroll
       groupRef.current.rotation.y += 0.002;
     }
@@ -58,14 +124,20 @@ function VectorSpace({ progress }) {
   return (
     <group ref={groupRef}>
       {/* Basis vectors: î (cyan), ĵ (violet), k̂ (white) */}
-      <Arrow to={[2, 0, 0]} color="#22d3ee" />
-      <Arrow to={[0, 2, 0]} color="#a78bfa" />
-      <Arrow to={[0, 0, 2]} color="#f5f5f7" />
+      <Arrow to={[2, 0, 0]} color={palette.axisX} />
+      <Arrow to={[0, 2, 0]} color={palette.axisY} />
+      <Arrow to={[0, 0, 2]} color={palette.axisZ} />
 
       {/* Origin sphere */}
       <mesh>
         <sphereGeometry args={[0.06, 16, 16]} />
-        <meshStandardMaterial color="#f5f5f7" emissive="#f5f5f7" emissiveIntensity={0.5} />
+        <meshStandardMaterial
+          color={palette.origin}
+          emissive={palette.originGlow}
+          emissiveIntensity={0.7}
+          roughness={0.2}
+          metalness={0.08}
+        />
       </mesh>
 
       {/* Custom vector — fades in on scroll */}
@@ -73,13 +145,13 @@ function VectorSpace({ progress }) {
         <group>
           <Arrow
             to={customVec}
-            color="#f59e0b"
+            color={palette.vector}
             lineWidth={4}
           />
           {/* Dashed projections onto axes */}
           <Line
             points={[customVec, [customVec[0], 0, 0]]}
-            color="#f59e0b"
+            color={palette.projection}
             lineWidth={1}
             dashed
             dashSize={0.08}
@@ -89,7 +161,7 @@ function VectorSpace({ progress }) {
           />
           <Line
             points={[customVec, [0, customVec[1], 0]]}
-            color="#f59e0b"
+            color={palette.projection}
             lineWidth={1}
             dashed
             dashSize={0.08}
@@ -105,7 +177,7 @@ function VectorSpace({ progress }) {
 
 // ── Transformation demo (appears at high scroll %) ────────────────
 
-function TransformPlane({ progress }) {
+function TransformPlane({ progress, palette }) {
   if (progress < 0.6) return null;
   const t = (progress - 0.6) / 0.4; // 0→1 from 60% scroll
 
@@ -113,7 +185,9 @@ function TransformPlane({ progress }) {
     <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, t * Math.PI * 0.25]}>
       <planeGeometry args={[3, 3, 6, 6]} />
       <meshStandardMaterial
-        color="#22d3ee"
+        color={palette.plane}
+        emissive={palette.planeGlow}
+        emissiveIntensity={0.18 + t * 0.12}
         transparent
         opacity={0.06 + t * 0.06}
         wireframe
@@ -125,37 +199,46 @@ function TransformPlane({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ palette, shouldAnimate }) {
   const { progress } = useScrollProgress();
 
   return (
     <>
-      <color attach="background" args={['#0a0a0f']} />
+      <color attach="background" args={[palette.background]} />
+      <fog attach="fog" args={[palette.fog, 8, 15]} />
 
       {/* Lighting */}
-      <ambientLight intensity={0.25} />
-      <pointLight position={[4, 6, 4]} intensity={2} color="#22d3ee" />
-      <pointLight position={[-4, -3, -3]} intensity={0.8} color="#a78bfa" />
+      <ambientLight intensity={palette.ambient} />
+      <pointLight position={[4, 6, 4]} intensity={2.2} color={palette.keyLight} />
+      <pointLight position={[-4, -3, -3]} intensity={0.95} color={palette.fillLight} />
+      <pointLight position={[0, 2.5, -4]} intensity={0.8} color={palette.rimLight} />
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
+        <circleGeometry args={[4.75, 64]} />
+        <meshBasicMaterial color={palette.floorGlow} transparent opacity={0.2} />
+      </mesh>
 
       {/* Grid floor */}
       <Grid
         args={[12, 12]}
         cellSize={1}
         cellThickness={0.3}
-        cellColor="#26262f"
+        cellColor={palette.gridCell}
         sectionSize={2}
         sectionThickness={0.6}
-        sectionColor="#26262f"
+        sectionColor={palette.gridSection}
         fadeDistance={10}
         position={[0, -0.01, 0]}
       />
 
-      <VectorSpace progress={progress} />
-      <TransformPlane progress={progress} />
+      <VectorSpace progress={progress} palette={palette} shouldAnimate={shouldAnimate} />
+      <TransformPlane progress={progress} palette={palette} />
 
       <OrbitControls
         enableZoom={false}
         enablePan={false}
+        enableDamping
+        dampingFactor={0.08}
         maxPolarAngle={Math.PI * 0.8}
         minPolarAngle={Math.PI * 0.15}
         autoRotate={false}
@@ -175,14 +258,22 @@ function SceneContent() {
  * frame-level animations read from a shared motion preference check.
  */
 export default function Scene() {
+  const { theme } = useTheme();
+  const palette = SCENE_PALETTES[theme] ?? SCENE_PALETTES.dark;
+  const shouldAnimate = useMemo(() => {
+    if (typeof window === 'undefined') return true;
+
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }, []);
+
   return (
     <Canvas
       aria-hidden="true"
-      camera={{ position: [4, 3, 4], fov: 45 }}
+      camera={{ position: [4.35, 3.15, 4.4], fov: 44 }}
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent palette={palette} shouldAnimate={shouldAnimate} />
     </Canvas>
   );
 }

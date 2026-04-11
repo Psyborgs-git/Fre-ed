@@ -1,5 +1,5 @@
 import PostCard from '../../components/PostCard.jsx';
-import { meta as linearAlgebraMeta } from '../intro-to-linear-algebra/meta.js';
+import { meta as linearAlgebraMeta } from '../ai-ml/intro-to-linear-algebra/meta.js';
 import { meta as perceptronMeta } from '../ai-ml/perceptron/meta.js';
 import { meta as mlpMeta } from '../ai-ml/mlp/meta.js';
 import { meta as backpropMeta } from '../ai-ml/backprop/meta.js';

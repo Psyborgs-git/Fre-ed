@@ -11,7 +11,7 @@ import About from './routes/about/index.jsx';
 import AiMl from './routes/ai-ml/index.jsx';
 
 // Blog articles
-import IntroToLinearAlgebra from './routes/intro-to-linear-algebra/index.jsx';
+import IntroToLinearAlgebra from './routes/ai-ml/intro-to-linear-algebra/index.jsx';
 import Perceptron from './routes/ai-ml/perceptron/index.jsx';
 import Transformer from './routes/ai-ml/transformer/index.jsx';
 import Moe from './routes/ai-ml/moe/index.jsx';

@@ -1,5 +1,6 @@
-import { Suspense, useRef, useEffect } from 'react';
+import { Suspense, useCallback, useEffect, useRef } from 'react';
 import { useScrollProgress } from '../lib/ScrollContext.jsx';
+import { getScrollableProgress } from '../lib/scrollProgress.js';
 import TagPill from './TagPill.jsx';
 
 function SceneFallback() {
@@ -17,6 +18,18 @@ function SceneFallback() {
           Loading 3D scene…
         </p>
       </div>
+    </div>
+  );
+}
+
+function SceneMetaOverlay({ meta }) {
+  if (!meta) return null;
+
+  return (
+    <div className="lesson-scene-meta">
+      <span className="lesson-scene-kicker">Interactive lesson</span>
+      <p className="lesson-scene-title">{meta.title}</p>
+      <p className="lesson-scene-copy">{meta.description}</p>
     </div>
   );
 }
@@ -59,6 +72,14 @@ function SceneChapterOverlay({ progress, chapters }) {
   );
 }
 
+function SceneHint() {
+  return (
+    <div className="lesson-scene-hint" aria-hidden="true">
+      Drag to orbit · Scroll the lesson below to animate
+    </div>
+  );
+}
+
 /** Thin gradient reading-progress bar across the top of the scene panel. */
 function SceneProgressBar({ progress }) {
   return (
@@ -80,38 +101,43 @@ function SceneProgressBar({ progress }) {
 }
 
 /**
- * Brilliant-inspired two-panel article layout.
+ * Brilliant-inspired lesson shell.
  *
- * Desktop (≥ lg):
- *   Left 55 %  — Article content scrolls (drives 3D animation via ScrollContext)
- *   Right 45 % — 3D scene, sticky, fills viewport height below nav
+ * The route is split into two persistent panes below the fixed nav:
+ *   Top pane    — the canvas and 3D lesson overlay
+ *   Bottom pane — a scrollable “paper” surface for the article content
  *
- * Mobile (< lg):
- *   Top          — 3D scene (45 vh)
- *   Below        — Article content scrolls
+ * The bottom pane owns scroll progress so the scene stays visible while the
+ * writing advances the animation.
  */
 export default function RouteLayout({ Scene, children, meta, chapters }) {
   const { setProgress, progress } = useScrollProgress();
   const contentRef = useRef(null);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const el = contentRef.current;
-      if (!el) return;
-      const scrolledPast = Math.max(0, -el.getBoundingClientRect().top);
-      setProgress(Math.min(1, scrolledPast / el.scrollHeight));
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
+  const handleContentScroll = useCallback(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    setProgress(getScrollableProgress(el.scrollTop, el.scrollHeight, el.clientHeight));
   }, [setProgress]);
 
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    el.scrollTop = 0;
+    handleContentScroll();
+  }, [handleContentScroll, meta?.title]);
+
   const sceneContent = Scene ? (
-    <div className="relative w-full h-full" style={{ background: 'var(--bg-scene)' }}>
+    <div className="lesson-scene-surface">
       <SceneProgressBar progress={progress} />
+      <SceneMetaOverlay meta={meta} />
       <Suspense fallback={<SceneFallback />}>
         <Scene />
       </Suspense>
+      <SceneHint />
       <SceneChapterOverlay progress={progress} chapters={chapters} />
     </div>
   ) : null;
@@ -119,9 +145,11 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
   if (!Scene) {
     return (
       <div className="min-h-screen pt-14" style={{ background: 'var(--bg-base)' }}>
-        <main ref={contentRef} aria-label="Article content">
-          <ArticleHeader meta={meta} />
-          <div className="prose-content px-4 pb-24">{children}</div>
+        <main aria-label="Article content" className="px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+          <article className="lesson-article-card lesson-article-card-static">
+            <ArticleHeader meta={meta} />
+            <div className="prose-content px-6 pb-24 pt-2 md:px-8 lg:px-12">{children}</div>
+          </article>
         </main>
       </div>
     );
@@ -129,55 +157,42 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
 
   return (
     <div className="min-h-screen pt-14" style={{ background: 'var(--bg-base)' }}>
-      {/*
-       * Flex column on mobile: scene (order-1) sits above content (order-2).
-       * Flex row on desktop:   content (order-1) left, scene (order-2) sticky right.
-       */}
-      <div className="flex flex-col lg:flex-row lg:items-start">
-
-        {/* ── 3D Scene: top on mobile, sticky right panel on desktop ── */}
+      <section className="lesson-shell" aria-label="Interactive lesson layout">
         <aside
-          className="order-1 lg:order-2 flex-shrink-0 overflow-hidden lg:sticky lg:top-14"
-          style={{
-            /* mobile */ height: '45vh',
-            width: '100%',
-          }}
+          className="lesson-scene-panel"
           aria-hidden="true"
-          // Override with desktop dimensions via a data attribute + CSS
-          data-scene-panel="true"
         >
           {sceneContent}
         </aside>
 
-        {/* ── Article content: below scene on mobile, left column on desktop ── */}
         <main
           ref={contentRef}
-          className="order-2 lg:order-1 lg:flex-1 lg:min-w-0"
+          className="lesson-content-panel"
           aria-label="Article content"
+          onScroll={handleContentScroll}
+          tabIndex={0}
         >
-          <ArticleHeader meta={meta} />
-          <div className="prose-content px-4 lg:px-8 pb-32">{children}</div>
+          <article className="lesson-article-card">
+            <ArticleHeader meta={meta} headingId="lesson-route-title" />
+            <div className="prose-content px-6 pb-24 pt-2 md:px-8 lg:px-12">{children}</div>
+          </article>
         </main>
-      </div>
-
-      {/* Inject desktop-breakpoint overrides for the scene panel */}
-      <style>{`
-        @media (min-width: 1024px) {
-          [data-scene-panel] {
-            width: 45vw;
-            height: calc(100vh - 3.5rem);
-            border-left: 1px solid var(--line);
-          }
-        }
-      `}</style>
+      </section>
     </div>
   );
 }
 
-function ArticleHeader({ meta }) {
+function ArticleHeader({ meta, headingId }) {
   if (!meta) return null;
   return (
-    <header className="max-w-prose mx-auto px-4 lg:px-8 pt-12 pb-8">
+    <header className="max-w-4xl mx-auto px-6 lg:px-12 pt-12 pb-10">
+      <p
+        className="text-xs font-semibold uppercase tracking-[0.32em] mb-4"
+        style={{ color: 'var(--accent-cyan)' }}
+      >
+        Interactive lesson
+      </p>
+
       {meta.tags?.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-5">
           {meta.tags.map((tag) => (
@@ -187,27 +202,28 @@ function ArticleHeader({ meta }) {
       )}
 
       <h1
-        className="text-4xl sm:text-5xl font-display font-bold leading-display mb-4"
+        id={headingId}
+        className="text-4xl sm:text-5xl lg:text-6xl font-display font-bold leading-display mb-4"
         style={{ color: 'var(--ink-hi)' }}
       >
         {meta.title}
       </h1>
 
-      <p className="text-lg mb-6 leading-relaxed" style={{ color: 'var(--ink-lo)' }}>
+      <p
+        className="text-lg md:text-xl mb-6 leading-relaxed max-w-3xl"
+        style={{ color: 'var(--ink-lo)' }}
+      >
         {meta.description}
       </p>
 
-      <div
-        className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm pt-4"
-        style={{ color: 'var(--ink-lo)', borderTop: '1px solid var(--line)' }}
-      >
+      <div className="flex flex-wrap items-center gap-3 text-sm pt-4">
         {meta.author && (
-          <span>
+          <span className="lesson-meta-chip">
             By <span style={{ color: 'var(--ink-hi)' }}>{meta.author}</span>
           </span>
         )}
         {meta.published && (
-          <time dateTime={meta.published}>
+          <time className="lesson-meta-chip" dateTime={meta.published}>
             {new Date(meta.published).toLocaleDateString('en-US', {
               year: 'numeric',
               month: 'long',
@@ -216,7 +232,7 @@ function ArticleHeader({ meta }) {
           </time>
         )}
         {meta.updated && meta.updated !== meta.published && (
-          <span className="text-xs">
+          <span className="lesson-meta-chip text-xs">
             Updated{' '}
             {new Date(meta.updated).toLocaleDateString('en-US', {
               year: 'numeric',

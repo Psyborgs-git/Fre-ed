@@ -36,5 +36,6 @@ Playwright runs after build:
 - [ ] Reduced-motion works
 - [ ] Mobile Safari scene renders
 - [ ] Keyboard nav through page
+- [ ] Split lesson shell keeps canvas visible while the article pane scrolls independently
 - [ ] Dark mode colors pass contrast
 - [ ] All routes in sitemap

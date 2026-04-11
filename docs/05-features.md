@@ -6,7 +6,7 @@
 Every directory → static HTML. No SSR server.
 
 ### F2 — Two-Segment Page Model
-Segment A: 3D scene. Segment B: content. Shared scroll progress.
+Segment A: persistent 3D lesson canvas. Segment B: scrollable content “paper”. Shared pane-based scroll progress keeps the canvas visible while readers move through the lesson.
 
 ### F3 — 3D Scene Engine
 - R3F + Three.js canvas per route
@@ -19,6 +19,7 @@ Segment A: 3D scene. Segment B: content. Shared scroll progress.
 - Shiki syntax highlight
 - KaTeX math
 - Callouts, asides, diagrams
+- Reading-optimized article chrome inside the split lesson shell
 
 ### F5 — Smooth Scroll
 Lenis + IntersectionObserver. ScrollContext publishes progress to scene.

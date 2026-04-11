@@ -28,8 +28,8 @@ Run in pre-commit + CI.
 ## Required Sections (all must be filled)
 1. **Route** — path + title
 2. **Learning goal** — what user walks away knowing
-3. **Scene concept** — 3D idea + camera arc
-4. **Scroll choreography** — what happens at 0%, 25%, 50%, 75%, 100% scroll
+3. **Scene concept** — 3D idea + camera arc + palette choices
+4. **Scroll choreography** — what happens at 0%, 25%, 50%, 75%, 100% scroll, and which pane owns the scroll
 5. **Content outline** — H2s of segment B
 6. **Assets** — models, textures, shaders used
 7. **Dependencies** — any shared components pulled in
@@ -41,6 +41,7 @@ Run in pre-commit + CI.
 ## Update Policy
 - Edit the doc in the same PR as the code change.
 - Append to Changelog section, don't overwrite.
+- If you change the shared lesson shell, update the affected page docs so the documented reading/scene choreography still matches reality.
 
 ## Doc ≠ Blog Content
 The page doc is *for developers*, not readers. It explains the machinery. The blog content lives in `Page.mdx`.

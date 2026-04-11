@@ -1,6 +1,6 @@
 # 3D Educational Blog — Dev Plan
 
-Interactive 3D educational blog. Static-built. Path-based routing. Each route = unique directory + 2 segments: (1) 3D interactive scene, (2) page code/content.
+Interactive 3D educational blog. Static-built. Path-based routing. Each route = unique directory + 2 segments: (1) a persistent 3D lesson canvas, (2) a scrollable page/content surface rendered as a reading pane beneath it.
 
 ## Docs Index
 
@@ -25,3 +25,9 @@ Interactive 3D educational blog. Static-built. Path-based routing. Each route = 
 ## Hard Rule
 
 Every new `/src/routes/<path>/` **MUST** ship with matching `docs/pages/<path>.md`. PR blocked without it.
+
+## Lesson Experience
+
+- Lesson routes use a shared split-screen shell inspired by products like Brilliant: the upper half keeps the 3D visualization visible while the lower half behaves like a readable paper/blog surface.
+- Scroll progress is sourced from the article pane itself, so the scene animates even while the overall page stays visually stable.
+- Scene palettes should follow the design tokens in `docs/06-design-branding.md`, including theme-aware accent colors for axes, highlights, and helper geometry.

@@ -3,7 +3,7 @@
  * Verifies every article exports the required fields with correct types.
  */
 import { describe, it, expect } from 'vitest';
-import { meta as linearAlgebra }  from '../routes/intro-to-linear-algebra/meta.js';
+import { meta as linearAlgebra }  from '../routes/ai-ml/intro-to-linear-algebra/meta.js';
 import { meta as perceptron }     from '../routes/ai-ml/perceptron/meta.js';
 import { meta as transformer }    from '../routes/ai-ml/transformer/meta.js';
 import { meta as moe }            from '../routes/ai-ml/moe/meta.js';
