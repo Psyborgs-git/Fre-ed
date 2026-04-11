@@ -89,10 +89,26 @@ export default function About() {
               <Link to="/ai-ml/perceptron">Perceptron</Link>{' '}
               <span className="text-accent-cyan text-xs">live</span>
             </li>
-            <li>Multi-layer perceptron (coming soon)</li>
-            <li>Backpropagation (coming soon)</li>
-            <li>Convolutional networks (coming soon)</li>
-            <li>Attention mechanism (coming soon)</li>
+            <li>
+              <Link to="/ai-ml/transformer">Transformer Block</Link>{' '}
+              <span className="text-accent-cyan text-xs">live</span>
+            </li>
+            <li>
+              <Link to="/ai-ml/moe">Mixture of Experts</Link>{' '}
+              <span className="text-accent-cyan text-xs">live</span>
+            </li>
+            <li>
+              <Link to="/ai-ml/rag">Retrieval-Augmented Generation</Link>{' '}
+              <span className="text-accent-cyan text-xs">live</span>
+            </li>
+            <li>
+              <Link to="/ai-ml/lora">LoRA — Low-Rank Adaptation</Link>{' '}
+              <span className="text-accent-cyan text-xs">live</span>
+            </li>
+            <li>
+              <Link to="/ai-ml/fine-tuning">Fine-Tuning</Link>{' '}
+              <span className="text-accent-cyan text-xs">live</span>
+            </li>
           </ul>
         </div>
       </div>

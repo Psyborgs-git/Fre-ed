@@ -1,0 +1,175 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## The cost of full fine-tuning
+
+Full fine-tuning updates every weight in a pre-trained model on a task-specific dataset.
+For LLaMA-3 70B that means 70 billion gradients, 70 billion momentum states, and 70
+billion velocity states — roughly **840 GB of optimiser state in FP32** before counting
+the model weights themselves. That requires multiple high-end GPUs just for a modest
+training run.
+
+**LoRA (Low-Rank Adaptation)** reduces this to a fraction: freeze the base model entirely,
+and instead learn two small **adapter matrices** $A$ and $B$ whose product approximates
+the weight update.
+
+<Callout type="note">
+The 3D scene shows the size contrast directly: the large grey grid is the frozen weight
+matrix W; the thin cyan column is A (d×r); the short violet row is B (r×d). Scroll to
+watch the adapters appear and their product ΔW highlighted on W.
+</Callout>
+
+## The LoRA insight — low-rank weight updates
+
+The key claim is that the fine-tuning weight update $\Delta W$ has **low intrinsic rank**:
+even though $\Delta W$ lives in a $d \times d$ space, it can be well-approximated by a
+rank-$r$ matrix for small $r$.
+
+LoRA exploits this by parameterising the update as:
+
+$$
+\Delta W = B A
+\quad \text{where } B \in \mathbb{R}^{d \times r},\; A \in \mathbb{R}^{r \times d},\; r \ll d
+$$
+
+The modified forward pass becomes:
+
+$$
+h = W_0 x + \Delta W x = W_0 x + B A x
+$$
+
+$W_0$ stays frozen throughout training — only $A$ and $B$ are updated.
+
+**Parameter count comparison** for a $d = 4096$ linear layer:
+
+| Method | Trainable params | % of full layer |
+|---|---|---|
+| Full fine-tune | $d^2 = 16{,}777{,}216$ | 100% |
+| LoRA $r=4$ | $2 \times d \times r = 32{,}768$ | 0.20% |
+| LoRA $r=8$ | $2 \times d \times r = 65{,}536$ | 0.39% |
+| LoRA $r=16$ | $2 \times d \times r = 131{,}072$ | 0.78% |
+
+<Callout type="tip">
+$A$ is initialised with random Gaussian values; $B$ is initialised to zero — so $\Delta W
+= BA = 0$ at the start of training and the model behaves identically to the base model at
+step zero. Training then nudges $A$ and $B$ away from zero.
+</Callout>
+
+## Implementation in PyTorch
+
+<CodeBlock language="python">
+{`import torch
+import torch.nn as nn
+import math
+
+class LoRALinear(nn.Module):
+    def __init__(self, in_features, out_features, rank=4, alpha=8):
+        super().__init__()
+        # Frozen base weights — no gradients
+        self.base = nn.Linear(in_features, out_features, bias=False)
+        self.base.weight.requires_grad = False
+
+        # Trainable low-rank adapters
+        self.A = nn.Parameter(torch.empty(rank, in_features))
+        self.B = nn.Parameter(torch.zeros(out_features, rank))
+        nn.init.kaiming_uniform_(self.A, a=math.sqrt(5))
+
+        # Scaling factor: alpha / rank (alpha is a hyperparameter)
+        self.scale = alpha / rank
+
+    def forward(self, x):
+        base_out = self.base(x)                 # W_0 x
+        lora_out = (x @ self.A.T) @ self.B.T   # x A^T B^T = BAx
+        return base_out + self.scale * lora_out
+
+# Replace attention projection layers in a transformer:
+model.transformer.h[0].attn.c_proj = LoRALinear(768, 768, rank=8, alpha=16)`}
+</CodeBlock>
+
+## Choosing rank r and target layers
+
+**Rank $r$** controls the adapter capacity. Typical values:
+- $r = 4$ or $r = 8$: minimal adapters, good for short instruction-following datasets
+- $r = 16$ or $r = 32$: more capacity, better for style adaptation or domain shift
+- $r = 64$+: approaches full fine-tuning quality on complex tasks
+
+**Which layers to adapt?** The original LoRA paper adapts only the attention projection
+matrices $W_Q$ and $W_V$. Subsequent work found that adapting all four ($W_Q, W_K, W_V,
+W_O$) and the FFN layers typically improves performance further.
+
+**Scaling factor $\alpha$**: a hyperparameter that scales $\Delta W$:
+
+$$
+h = W_0 x + \frac{\alpha}{r}\, B A x
+$$
+
+Setting $\alpha = 2r$ is a common heuristic that keeps the effective learning rate
+independent of $r$ when you change rank.
+
+## QLoRA — quantised base + LoRA adapters
+
+**QLoRA** (Dettmers et al., 2023) pushes parameter efficiency further by quantising the
+frozen base model to 4-bit (NF4) precision, while keeping the LoRA adapters in 16-bit:
+
+$$
+h = \text{dequant}(W_0^{4\text{bit}}) \cdot x + B A x
+$$
+
+<CodeBlock language="python">
+{`from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+from peft import get_peft_model, LoraConfig
+
+# Load model in 4-bit
+bnb_config = BitsAndBytesConfig(load_in_4bit=True,
+                                 bnb_4bit_quant_type="nf4",
+                                 bnb_4bit_use_double_quant=True,
+                                 bnb_4bit_compute_dtype=torch.bfloat16)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B",
+    quantization_config=bnb_config,
+    device_map="auto",
+)
+
+# Attach LoRA adapters
+lora_cfg = LoraConfig(r=16, lora_alpha=32, target_modules=["q_proj","v_proj"],
+                       lora_dropout=0.05, bias="none", task_type="CAUSAL_LM")
+model = get_peft_model(model, lora_cfg)
+model.print_trainable_parameters()
+# trainable params: 6,815,744 || all params: 8,036,565,504 || trainable%: 0.0848`}
+</CodeBlock>
+
+QLoRA enables fine-tuning a 70B model on a single 48 GB GPU — previously impossible
+without a cluster.
+
+## Merging LoRA back into the base model
+
+At inference time you can either:
+1. **Keep adapters separate** — load base + adapters, ~5 % memory overhead from adapters
+2. **Merge** — add $\Delta W = BA$ into $W_0$ before saving; zero inference overhead
+
+<CodeBlock language="python">
+{`# PEFT merge-and-unload pattern
+merged_model = model.merge_and_unload()   # LoRA merged into base weights
+merged_model.save_pretrained("my-model-merged")
+# Now it behaves like a normal model with no PEFT overhead`}
+</CodeBlock>
+
+<Callout type="warning">
+Once merged, the base model is modified. Keep the adapter weights separately if you need
+to revert to the base model or switch adapters (e.g., one LoRA for code, another for
+creative writing, applied on-demand).
+</Callout>
+
+## Other PEFT methods
+
+LoRA is not the only parameter-efficient fine-tuning approach:
+
+| Method | What it trains | Notes |
+|---|---|---|
+| LoRA | Low-rank $\Delta W = BA$ per layer | Most widely used; mergeable |
+| QLoRA | 4-bit base + 16-bit LoRA | Best memory efficiency |
+| Prefix Tuning | Learnable prefix tokens prepended to KV | No weight changes; task-switching easy |
+| Prompt Tuning | Learnable soft prompt tokens | Simplest; weaker on complex tasks |
+| Adapters | Small bottleneck MLP inserted between layers | Higher inference cost; not mergeable |
+| IA³ | Per-element scalar rescaling of K, V, FFN | Extremely few params; competitive on some tasks |
