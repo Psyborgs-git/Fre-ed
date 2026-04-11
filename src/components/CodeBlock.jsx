@@ -2,14 +2,13 @@ import { useState } from 'react';
 import { trackCodeCopy } from '../lib/analytics.js';
 
 /**
- * Styled code block with filename header and copy button.
- * Used as the MDX `pre` element override so all fenced code blocks get this treatment.
+ * Styled code block with language header and copy button.
+ * Theme-aware via CSS variables.
  */
 export default function CodeBlock({ children, language, filename }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    // children may be a React element; convert to text via innerText trick
     const text =
       typeof children === 'string'
         ? children
@@ -17,7 +16,7 @@ export default function CodeBlock({ children, language, filename }) {
 
     try {
       await navigator.clipboard.writeText(
-        typeof text === 'string' ? text.trim() : String(text)
+        typeof text === 'string' ? text.trim() : String(text),
       );
       setCopied(true);
       trackCodeCopy(window.location.pathname, language ?? 'unknown');
@@ -28,15 +27,29 @@ export default function CodeBlock({ children, language, filename }) {
   };
 
   return (
-    <div className="relative my-6 rounded-xl border border-line overflow-hidden">
+    <div
+      className="relative my-6 rounded-xl overflow-hidden"
+      style={{ border: '1px solid var(--line)' }}
+    >
       {/* Header bar */}
-      <div className="flex items-center justify-between bg-bg-elev border-b border-line px-4 py-2">
-        <span className="text-xs font-mono text-ink-lo">
+      <div
+        className="flex items-center justify-between px-4 py-2"
+        style={{
+          background: 'var(--bg-elev)',
+          borderBottom: '1px solid var(--line)',
+        }}
+      >
+        <span className="text-xs font-mono" style={{ color: 'var(--ink-lo)' }}>
           {filename ?? (language ? `.${language}` : 'code')}
         </span>
         <button
           onClick={handleCopy}
-          className="text-xs px-2.5 py-1 rounded bg-bg-base border border-line text-ink-lo hover:text-ink-hi transition-colors"
+          className="text-xs px-2.5 py-1 rounded transition-colors"
+          style={{
+            background: 'var(--bg-base)',
+            border: '1px solid var(--line)',
+            color: copied ? 'var(--accent-cyan)' : 'var(--ink-lo)',
+          }}
           aria-label={copied ? 'Copied to clipboard' : 'Copy code to clipboard'}
         >
           {copied ? 'Copied!' : 'Copy'}
@@ -44,7 +57,10 @@ export default function CodeBlock({ children, language, filename }) {
       </div>
 
       {/* Code area */}
-      <pre className="bg-bg-base p-4 overflow-x-auto text-sm leading-relaxed m-0">
+      <pre
+        className="p-4 overflow-x-auto text-sm leading-relaxed m-0 font-mono"
+        style={{ background: 'var(--bg-base)', color: 'var(--ink-hi)' }}
+      >
         {children}
       </pre>
     </div>

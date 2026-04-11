@@ -4,11 +4,40 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    color-scheme: dark;
-  }
+/* ── Theme CSS Variables ──────────────────────────────────────────── */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-base: #0a0a0f;
+  --bg-elev: #15151d;
+  --bg-scene: #0a0a0f;
+  --ink-hi: #f5f5f7;
+  --ink-lo: #9a9aa8;
+  --line: #26262f;
+  --scrollbar-thumb: #26262f;
+  --scrollbar-thumb-hover: #9a9aa8;
+  /* Accents stay consistent */
+  --accent-cyan: #22d3ee;
+  --accent-violet: #a78bfa;
+  --accent-warn: #f59e0b;
+}
 
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-base: #f4f4f8;
+  --bg-elev: #ffffff;
+  --bg-scene: #0d0d16;
+  --ink-hi: #0d0d14;
+  --ink-lo: #5c5c70;
+  --line: #e0e0ea;
+  --scrollbar-thumb: #d0d0de;
+  --scrollbar-thumb-hover: #5c5c70;
+  --accent-cyan: #0891b2;
+  --accent-violet: #7c3aed;
+  --accent-warn: #d97706;
+}
+
+@layer base {
   * {
     box-sizing: border-box;
   }
@@ -18,8 +47,13 @@
   }
 
   body {
-    @apply bg-bg-base text-ink-hi font-body antialiased;
+    background-color: var(--bg-base);
+    color: var(--ink-hi);
+    font-family: Inter, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 
   /* Scrollbar styling */
@@ -27,101 +61,179 @@
     width: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-bg-base;
+    background: var(--bg-base);
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-line rounded-full;
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-ink-lo;
+    background: var(--scrollbar-thumb-hover);
   }
 }
 
 @layer components {
   /* ── Prose content styles ─────────────────────────────── */
   .prose-content {
-    @apply max-w-prose mx-auto text-ink-hi leading-prose;
+    max-width: 72ch;
+    margin-left: auto;
+    margin-right: auto;
+    color: var(--ink-hi);
+    line-height: 1.6;
   }
 
   .prose-content h1 {
-    @apply text-4xl font-display font-bold leading-display mb-6 mt-10 text-ink-hi;
+    font-size: 2.25rem;
+    font-family: 'Space Grotesk', Inter, sans-serif;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 1.5rem;
+    margin-top: 2.5rem;
+    color: var(--ink-hi);
   }
 
   .prose-content h2 {
-    @apply text-2xl font-display font-semibold leading-display mb-4 mt-10 pt-6 border-t border-line text-ink-hi;
+    font-size: 1.5rem;
+    font-family: 'Space Grotesk', Inter, sans-serif;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    color: var(--ink-hi);
   }
 
   .prose-content h3 {
-    @apply text-xl font-display font-semibold leading-display mb-3 mt-6 text-ink-hi;
+    font-size: 1.25rem;
+    font-family: 'Space Grotesk', Inter, sans-serif;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 0.75rem;
+    margin-top: 1.5rem;
+    color: var(--ink-hi);
   }
 
   .prose-content p {
-    @apply mb-5 text-ink-hi leading-prose;
+    margin-bottom: 1.25rem;
+    color: var(--ink-hi);
+    line-height: 1.6;
   }
 
   .prose-content ul {
-    @apply list-disc list-outside pl-6 mb-5 space-y-1 text-ink-hi;
+    list-style-type: disc;
+    list-style-position: outside;
+    padding-left: 1.5rem;
+    margin-bottom: 1.25rem;
+    color: var(--ink-hi);
   }
 
   .prose-content ol {
-    @apply list-decimal list-outside pl-6 mb-5 space-y-1 text-ink-hi;
+    list-style-type: decimal;
+    list-style-position: outside;
+    padding-left: 1.5rem;
+    margin-bottom: 1.25rem;
+    color: var(--ink-hi);
   }
 
   .prose-content li {
-    @apply leading-prose;
+    line-height: 1.6;
+    margin-bottom: 0.25rem;
   }
 
   .prose-content blockquote {
-    @apply border-l-4 border-accent-cyan pl-4 italic text-ink-lo my-6;
+    border-left: 4px solid var(--accent-cyan);
+    padding-left: 1rem;
+    font-style: italic;
+    color: var(--ink-lo);
+    margin: 1.5rem 0;
   }
 
   .prose-content hr {
-    @apply border-line my-8;
+    border-color: var(--line);
+    margin: 2rem 0;
   }
 
   .prose-content a {
-    @apply text-accent-cyan underline underline-offset-2 hover:text-accent-violet transition-colors;
+    color: var(--accent-cyan);
+    text-decoration: underline;
+    text-underline-offset: 0.125rem;
+    transition: color 0.15s ease;
+  }
+
+  .prose-content a:hover {
+    color: var(--accent-violet);
   }
 
   .prose-content strong {
-    @apply font-semibold text-ink-hi;
+    font-weight: 600;
+    color: var(--ink-hi);
   }
 
   .prose-content em {
-    @apply italic text-ink-lo;
+    font-style: italic;
+    color: var(--ink-lo);
   }
 
   .prose-content pre {
-    @apply bg-bg-elev rounded-lg p-4 overflow-x-auto my-6 border border-line;
+    background: var(--bg-elev);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1.5rem 0;
+    border: 1px solid var(--line);
   }
 
   .prose-content code:not(pre code) {
-    @apply bg-bg-elev text-accent-cyan px-1.5 py-0.5 rounded text-sm font-mono;
+    background: var(--bg-elev);
+    color: var(--accent-cyan);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-family: 'JetBrains Mono', monospace;
   }
 
   .prose-content table {
-    @apply w-full border-collapse my-6 text-sm;
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.875rem;
   }
 
   .prose-content th {
-    @apply border border-line px-4 py-2 text-left font-semibold text-ink-hi bg-bg-elev;
+    border: 1px solid var(--line);
+    padding: 0.5rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--ink-hi);
+    background: var(--bg-elev);
   }
 
   .prose-content td {
-    @apply border border-line px-4 py-2 text-ink-lo;
+    border: 1px solid var(--line);
+    padding: 0.5rem 1rem;
+    color: var(--ink-lo);
   }
 
   .prose-content tr:hover td {
-    @apply bg-bg-elev/50;
+    background: color-mix(in srgb, var(--bg-elev) 50%, transparent);
   }
 
   /* ── KaTeX math overrides ─────────────────────────────── */
   .prose-content .math-inline {
-    @apply inline-block;
+    display: inline-block;
   }
 
   .prose-content .math-display {
-    @apply block overflow-x-auto py-4 text-center;
+    display: block;
+    overflow-x: auto;
+    padding: 1rem 0;
+    text-align: center;
+  }
+
+  /* KaTeX color fix for light mode */
+  :root[data-theme='light'] .katex {
+    color: var(--ink-hi);
   }
 
   /* ── Reduced motion ───────────────────────────────────── */

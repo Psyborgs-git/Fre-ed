@@ -1,0 +1,236 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Why a single perceptron isn't enough
+
+A single perceptron draws **one straight line** through the input space. It can separate
+points that lie on opposite sides of that line — but the moment a problem requires a
+curved or non-linear boundary, it fails.
+
+The classic example is **XOR**: given two binary inputs, output 1 only when they differ.
+No straight line can separate the four XOR points into the right two groups.
+
+The solution: **stack multiple layers of perceptrons** into a **Multi-Layer Perceptron (MLP)**.
+Hidden layers bend and warp the input space so that a final linear boundary can separate
+any pattern. The 3D scene shows this:
+
+| 3D object | Meaning |
+|---|---|
+| Violet spheres (left) | 3 input neurons |
+| Cyan spheres (centre) | 2 hidden layers of 4 neurons each |
+| Amber spheres (right) | 2 output neurons |
+| Lines between layers | Weighted connections (all-to-all) |
+| Translucent plane | Decision boundary after transformation |
+| Travelling white sphere | A single forward pass, left → right |
+
+<Callout type="note">
+Scroll through to see layers activate sequentially — each layer's signal ripples through
+before the next layer lights up. The white pulse at the end shows a complete forward pass.
+</Callout>
+
+## Architecture: layers, widths, and depth
+
+An MLP is described by:
+
+- **Input layer** — one neuron per input feature (pass-through, no activation)
+- **Hidden layers** — learnable transformations with non-linear activations
+- **Output layer** — one neuron per output class (or 1 for regression)
+
+For a network with input size $d_{\text{in}}$, hidden sizes $[h_1, h_2, \ldots, h_L]$,
+and output size $d_{\text{out}}$, the full forward pass is:
+
+$$
+\mathbf{a}^{(0)} = \mathbf{x}
+$$
+
+$$
+\mathbf{z}^{(l)} = W^{(l)}\,\mathbf{a}^{(l-1)} + \mathbf{b}^{(l)}
+\quad \text{(linear transform)}
+$$
+
+$$
+\mathbf{a}^{(l)} = \sigma\!\left(\mathbf{z}^{(l)}\right)
+\quad \text{(activation)}
+$$
+
+$$
+\hat{y} = \mathbf{a}^{(L)}
+\quad \text{(output)}
+$$
+
+where $W^{(l)} \in \mathbb{R}^{h_l \times h_{l-1}}$ and $\sigma$ is a non-linear
+activation function (ReLU, GELU, etc.).
+
+**Parameter count:**
+
+$$
+\text{params} = \sum_{l=1}^{L} \bigl( h_l \times h_{l-1} + h_l \bigr)
+$$
+
+For the network in the scene — input(3) → hidden(4) → hidden(4) → output(2):
+
+$$
+(3 \times 4 + 4) + (4 \times 4 + 4) + (4 \times 2 + 2) = 16 + 20 + 10 = 46 \text{ params}
+$$
+
+## Solving XOR — the power of hidden representations
+
+A two-input, one-output network with a single hidden layer of 2 neurons **can** solve XOR:
+
+$$
+x_1 \oplus x_2 =
+\begin{cases}
+1 & (0,1),\,(1,0) \\
+0 & (0,0),\,(1,1)
+\end{cases}
+$$
+
+The hidden layer learns an intermediate representation that maps the four XOR points
+to positions that are linearly separable:
+
+<CodeBlock language="python">
+{`import numpy as np
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+# Hand-crafted weights that solve XOR exactly
+W1 = np.array([[1, 1], [1, 1]])    # shape: (2, 2)
+b1 = np.array([0, -1])
+W2 = np.array([[1, -2]])           # shape: (1, 2)
+b2 = np.array([0])
+
+def forward(x):
+    h = sigmoid(W1 @ x + b1)      # hidden layer
+    y = sigmoid(W2 @ h + b2)      # output layer
+    return y
+
+# Test all four XOR inputs
+for x in [[0,0],[0,1],[1,0],[1,1]]:
+    print(f"XOR{x} = {forward(np.array(x))[0]:.4f}")`}
+</CodeBlock>
+
+The trick: the first hidden neuron detects "at least one is 1" (OR gate), the second
+detects "both are 1" (AND gate). The output layer then computes OR AND NOT(AND) — which
+equals XOR.
+
+## The universal approximation theorem
+
+The theoretical justification for MLPs is powerful:
+
+> **Universal Approximation Theorem** (Hornik 1991):
+> A feedforward network with a single hidden layer of sufficient width can approximate
+> any continuous function on a compact subset of $\mathbb{R}^n$ to arbitrary precision.
+
+In practice this means: given enough neurons, a two-layer MLP can fit any training set.
+The catch is that "enough neurons" can be exponential in the input dimension — which is
+why **depth** (more layers) is more efficient than width (more neurons per layer).
+
+<Callout type="tip">
+Empirically, deeper networks generalise better because each additional layer can
+**compose** simpler features into more abstract ones. Vision networks learn edges →
+textures → parts → objects — each layer one level of abstraction higher than the last.
+</Callout>
+
+## Implementing an MLP in NumPy
+
+<CodeBlock language="python">
+{`import numpy as np
+
+class MLP:
+    def __init__(self, layer_sizes, lr=0.01):
+        """layer_sizes: e.g. [2, 4, 4, 1] for a 2-in, two 4-hidden, 1-out MLP."""
+        self.lr = lr
+        self.weights = []
+        self.biases = []
+        for i in range(len(layer_sizes) - 1):
+            fan_in  = layer_sizes[i]
+            fan_out = layer_sizes[i + 1]
+            # He initialisation for ReLU
+            std = np.sqrt(2 / fan_in)
+            self.weights.append(np.random.randn(fan_out, fan_in) * std)
+            self.biases.append(np.zeros(fan_out))
+
+    def relu(self, z):
+        return np.maximum(0, z)
+
+    def relu_grad(self, z):
+        return (z > 0).astype(float)
+
+    def forward(self, x):
+        """Returns (output, cache of (z, a) per layer)."""
+        self.cache = []
+        a = x
+        for W, b in zip(self.weights[:-1], self.biases[:-1]):
+            z = W @ a + b
+            a = self.relu(z)
+            self.cache.append((z, a))
+        # Output layer — linear (for regression) or sigmoid/softmax (classification)
+        z_out = self.weights[-1] @ a + self.biases[-1]
+        self.cache.append((z_out, z_out))
+        return z_out
+
+    def mse_loss(self, y_pred, y_true):
+        return np.mean((y_pred - y_true) ** 2)
+
+# Quick sanity check on XOR
+mlp = MLP([2, 4, 4, 1])
+X = np.array([[0,0],[0,1],[1,0],[1,1]]).T   # shape (2, 4)
+y = np.array([[0, 1, 1, 0]])                # shape (1, 4)
+print("Initial output:", mlp.forward(X[:, 0]))`}
+</CodeBlock>
+
+## Why we need non-linear activations
+
+Without activations, stacking layers does nothing:
+
+$$
+W^{(2)}\!\left(W^{(1)} x + b^{(1)}\right) + b^{(2)}
+= \underbrace{\left(W^{(2)} W^{(1)}\right)}_{W'} x
+  + \underbrace{\left(W^{(2)} b^{(1)} + b^{(2)}\right)}_{b'}
+$$
+
+This collapses to a single linear transformation — equivalent to a perceptron.
+The activation function $\sigma$ **breaks** this collapse, forcing each layer to perform
+a genuinely new computation.
+
+| Activation | Formula | Key property |
+|---|---|---|
+| ReLU | $\max(0, z)$ | Sparse activations, no vanishing gradient for $z>0$ |
+| Leaky ReLU | $\max(\alpha z, z)$, $\alpha \ll 1$ | Fixes the "dying ReLU" problem |
+| GELU | $z \cdot \Phi(z)$ | Smooth, used in BERT and GPT |
+| Swish | $z \cdot \sigma(z)$ | Self-gated; sometimes outperforms ReLU |
+| Tanh | $\tanh(z)$ | Zero-centred; suffers from vanishing gradients |
+
+## Depth vs. width — why "going deeper" works
+
+The universal approximation theorem guarantees that a **wide** network can approximate
+any function. But wide-shallow networks need exponentially more neurons than
+deep-narrow ones for the same expressive power.
+
+**Intuition:** each layer composes the previous layer's features. A network learning
+to classify handwritten digits might build:
+- Layer 1: edges and orientations
+- Layer 2: curves and corners  
+- Layer 3: digit strokes
+- Layer 4: full digit shapes
+
+Each layer reuses and combines features from the layer below, creating an efficient
+representational hierarchy. This is the key empirical insight behind modern deep learning.
+
+## Summary
+
+$$
+\underbrace{\mathbf{x}}_{\text{input}}
+\xrightarrow{\;W^{(1)}, b^{(1)}\;}
+\underbrace{\sigma(\cdot)}_{\text{H1}}
+\xrightarrow{\;W^{(2)}, b^{(2)}\;}
+\underbrace{\sigma(\cdot)}_{\text{H2}}
+\xrightarrow{\;W^{(3)}, b^{(3)}\;}
+\underbrace{\hat{y}}_{\text{output}}
+$$
+
+- Hidden layers learn **intermediate representations** that transform the input space.
+- Non-linear activations are what make multi-layer networks strictly more powerful than a single layer.
+- The universal approximation theorem guarantees expressiveness; **backpropagation** (next article) makes it trainable.
+- Depth beats width in practice — hierarchical feature composition is the engine behind all modern deep learning.
