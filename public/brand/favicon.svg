@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" aria-label="Fre-ed favicon">
+  <!-- Hexagonal mark on dark background -->
+  <rect width="32" height="32" rx="6" fill="#0a0a0f"/>
+  <polygon
+    points="16,4 25,9 25,21 16,26 7,21 7,9"
+    fill="none"
+    stroke="#22d3ee"
+    stroke-width="1.5"
+  />
+  <!-- Inner diamond -->
+  <polygon
+    points="16,9 21,16 16,23 11,16"
+    fill="#22d3ee"
+    opacity="0.25"
+  />
+  <!-- Cyan facets -->
+  <line x1="16" y1="4"  x2="16" y2="9"  stroke="#22d3ee" stroke-width="1.2"/>
+  <line x1="25" y1="9"  x2="21" y2="16" stroke="#22d3ee" stroke-width="1.2"/>
+  <line x1="7"  y1="9"  x2="11" y2="16" stroke="#22d3ee" stroke-width="1.2"/>
+  <!-- Violet facets -->
+  <line x1="25" y1="21" x2="21" y2="16" stroke="#a78bfa" stroke-width="1.2"/>
+  <line x1="16" y1="26" x2="16" y2="23" stroke="#a78bfa" stroke-width="1.2"/>
+  <line x1="7"  y1="21" x2="11" y2="16" stroke="#a78bfa" stroke-width="1.2"/>
+  <!-- Center dot -->
+  <circle cx="16" cy="16" r="1.5" fill="#22d3ee"/>
+</svg>
