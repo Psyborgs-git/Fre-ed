@@ -1,0 +1,161 @@
+import Callout from '../../components/Callout.jsx';
+import CodeBlock from '../../components/CodeBlock.jsx';
+
+## What is a vector?
+
+A **vector** is an arrow in space — it has a **direction** and a **magnitude**.
+When we write a 3D vector $\vec{v} = (1,\, 2,\, 3)$, we mean: travel 1 unit along the
+x-axis, 2 units along the y-axis, and 3 units along the z-axis.
+
+The 3D scene above shows the three **basis vectors** — the irreducible building blocks of
+all of 3D space:
+
+$$
+\hat{i} = \begin{pmatrix} 1 \\ 0 \\ 0 \end{pmatrix}, \quad
+\hat{j} = \begin{pmatrix} 0 \\ 1 \\ 0 \end{pmatrix}, \quad
+\hat{k} = \begin{pmatrix} 0 \\ 0 \\ 1 \end{pmatrix}
+$$
+
+The hat symbol (e.g. $\hat{i}$) indicates a **unit vector** — a vector with magnitude exactly 1.
+
+<Callout type="note">
+Scroll up to watch the amber vector appear. It is a **linear combination** of the basis
+vectors — just a scaled sum of $\hat{i}$, $\hat{j}$, and $\hat{k}$.
+</Callout>
+
+## Linear combinations
+
+Any vector in 3D space can be expressed as a **linear combination** of the basis vectors.
+"Linear" because we only scale and add — no squaring, no trigonometry:
+
+$$
+\vec{v} = a\,\hat{i} + b\,\hat{j} + c\,\hat{k} = \begin{pmatrix} a \\ b \\ c \end{pmatrix}
+$$
+
+The set of all vectors you can reach this way is called the **span** of the basis. With three
+linearly independent basis vectors you can reach every point in 3D space.
+
+In Python (NumPy):
+
+<CodeBlock language="python">
+{`import numpy as np
+
+i = np.array([1, 0, 0])   # î
+j = np.array([0, 1, 0])   # ĵ
+k = np.array([0, 0, 1])   # k̂
+
+v = 1.5 * i + 1.2 * j + 0.8 * k
+# array([1.5, 1.2, 0.8])  — same as np.array([1.5, 1.2, 0.8])`}
+</CodeBlock>
+
+## Matrices: machines that transform space
+
+A **matrix** is a function that takes every vector in space and moves it to a new location.
+Multiplying a vector $\vec{v}$ by a matrix $A$ produces a new vector $A\vec{v}$.
+
+Consider this $3 \times 3$ rotation matrix (90° around the z-axis):
+
+$$
+R_z(90°) = \begin{pmatrix} 0 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{pmatrix}
+$$
+
+Apply it to $\hat{i} = (1, 0, 0)$:
+
+$$
+R_z(90°)\,\hat{i}
+= \begin{pmatrix} 0 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{pmatrix}
+  \begin{pmatrix} 1 \\ 0 \\ 0 \end{pmatrix}
+= \begin{pmatrix} 0 \\ 1 \\ 0 \end{pmatrix}
+= \hat{j}
+$$
+
+The x-axis arrow lands exactly on the y-axis arrow — a 90° rotation.
+Every matrix can be read column by column: **column $k$ tells you where the $k$-th basis
+vector lands**.
+
+<Callout type="tip">
+This is the key insight: **a matrix is completely described by what it does to the basis
+vectors**. If you know where $\hat{i}$, $\hat{j}$, and $\hat{k}$ go, you know where
+*every* vector goes.
+</Callout>
+
+## The dot product
+
+The **dot product** measures how much two vectors point in the same direction:
+
+$$
+\vec{a} \cdot \vec{b}
+= a_x b_x + a_y b_y + a_z b_z
+= \|\vec{a}\|\,\|\vec{b}\|\cos\theta
+$$
+
+where $\theta$ is the angle between them. Key facts:
+
+| Condition | Meaning |
+|---|---|
+| $\vec{a} \cdot \vec{b} = 0$ | Vectors are **perpendicular** |
+| $\vec{a} \cdot \vec{b} > 0$ | Vectors point in **similar** directions |
+| $\vec{a} \cdot \vec{b} < 0$ | Vectors point in **opposite** directions |
+| $\vec{a} \cdot \vec{a} = \|\vec{a}\|^2$ | Self-dot gives squared magnitude |
+
+<Callout type="note">
+The dot product is the *most used operation in machine learning*. A linear layer in a
+neural network is simply a matrix multiply, which is a grid of dot products. Attention is
+computed with dot products. Even cosine similarity is just a normalised dot product.
+</Callout>
+
+<CodeBlock language="python">
+{`a = np.array([1.0, 2.0, 3.0])
+b = np.array([4.0, 5.0, 6.0])
+
+dot = np.dot(a, b)              # 1*4 + 2*5 + 3*6 = 32.0
+# or equivalently: (a * b).sum()
+# or, for matrices: a @ b`}
+</CodeBlock>
+
+## The cross product
+
+The **cross product** of two 3D vectors produces a third vector perpendicular to both:
+
+$$
+\vec{a} \times \vec{b}
+= \begin{pmatrix} a_y b_z - a_z b_y \\ a_z b_x - a_x b_z \\ a_x b_y - a_y b_x \end{pmatrix}
+$$
+
+Its magnitude equals the **area of the parallelogram** spanned by $\vec{a}$ and $\vec{b}$:
+
+$$
+\|\vec{a} \times \vec{b}\| = \|\vec{a}\|\,\|\vec{b}\|\sin\theta
+$$
+
+The direction follows the **right-hand rule**: curl your right-hand fingers from $\vec{a}$
+toward $\vec{b}$; your thumb points in the direction of $\vec{a} \times \vec{b}$.
+
+The cross product is used in 3D graphics for computing surface normals (the vector pointing
+away from a face), which tells the renderer how light bounces off a surface.
+
+## Why this matters for machine learning
+
+Linear algebra is the *language* of machine learning:
+
+- **Datasets** are matrices (rows = samples, columns = features)
+- **Weight parameters** are vectors and matrices
+- **Linear layers** are matrix multiplications: $\vec{y} = W\vec{x} + \vec{b}$
+- **Attention** uses dot products to compute token similarity scores
+- **PCA** is an eigen-decomposition of the data covariance matrix
+- **Embeddings** are vectors in a high-dimensional space
+
+When you write `x @ W + b` in PyTorch, you are projecting your data through a learned
+linear transformation — the same kind of transformation we visualised with the rotation
+matrix above, except in hundreds or thousands of dimensions.
+
+<Callout type="tip">
+The 3D scene is a low-dimensional window into something that happens in thousands of
+dimensions. Every intuition you build here carries forward.
+</Callout>
+
+## What's next
+
+Now that you have a spatial sense of vectors, matrices, and transformations, you are ready
+to see how they appear inside a neural network. In the next article we build a
+**perceptron** — a single artificial neuron — from scratch.

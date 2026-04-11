@@ -1,0 +1,192 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## The simplest neural network
+
+A **perceptron** is a single artificial neuron — the fundamental unit from which every
+neural network is built.
+
+It takes several **inputs** $x_1, x_2, \ldots, x_n$, multiplies each by a learnable
+**weight** $w_i$, adds a **bias** $b$, and passes the result through an **activation
+function** $\sigma$:
+
+$$
+y = \sigma\!\left(\sum_{i=1}^{n} w_i\,x_i + b\right) = \sigma(\mathbf{w}^{\top}\mathbf{x} + b)
+$$
+
+The 3D scene above encodes this equation spatially:
+
+| 3D object | Equation term |
+|---|---|
+| Violet spheres (left) | Inputs $x_1 \ldots x_4$ |
+| Cyan lines | Positive weights $w_i > 0$ |
+| Amber lines | Negative weights $w_i < 0$ |
+| Line thickness | Weight magnitude $\lvert w_i \rvert$ |
+| Cyan sphere (centre) | Neuron computing the weighted sum |
+| Amber sphere (right) | Output $y$ |
+| Translucent plane | Decision boundary (where $z = 0$) |
+
+<Callout type="note">
+Scroll through the scene to watch the neuron "activate" — its glow intensifies as the
+weighted sum exceeds the threshold. The decision boundary plane tilts to show how learned
+weights re-orient the separating hyperplane.
+</Callout>
+
+## The math, step by step
+
+Let's work through a concrete example with two inputs:
+
+**Step 1 — Compute the weighted sum (pre-activation):**
+
+$$
+z = w_1 x_1 + w_2 x_2 + b
+$$
+
+Using $x_1 = 0.5$, $x_2 = 0.8$, $w_1 = 0.6$, $w_2 = -0.3$, $b = 0.1$:
+
+$$
+z = 0.6 \times 0.5 + (-0.3) \times 0.8 + 0.1 = 0.3 - 0.24 + 0.1 = 0.16
+$$
+
+**Step 2 — Apply the activation function:**
+
+The original perceptron used a **step function** (Heaviside):
+
+$$
+\sigma_{\text{step}}(z) = \begin{cases} 1 & \text{if } z \geq 0 \\ 0 & \text{if } z < 0 \end{cases}
+$$
+
+Since $z = 0.16 \geq 0$, the perceptron outputs $y = 1$ (fires).
+
+<CodeBlock language="python">
+{`import numpy as np
+
+def perceptron(x, w, b, activation='step'):
+    z = np.dot(w, x) + b            # weighted sum
+    if activation == 'step':
+        return int(z >= 0)           # Heaviside
+    if activation == 'sigmoid':
+        return 1 / (1 + np.exp(-z))  # smooth output
+    if activation == 'relu':
+        return max(0, z)             # ReLU
+
+x = np.array([0.5, 0.8])
+w = np.array([0.6, -0.3])
+b = 0.1
+
+print(perceptron(x, w, b))  # 1  (neuron fires)`}
+</CodeBlock>
+
+## The decision boundary
+
+When you have 2 inputs and a step activation, the perceptron **partitions the input plane
+into two regions**: points where it outputs 1 and points where it outputs 0.
+
+The border between those regions is the **decision boundary** — the set of all $\mathbf{x}$
+where $z = 0$:
+
+$$
+w_1 x_1 + w_2 x_2 + b = 0
+\quad \Longleftrightarrow \quad
+x_2 = -\frac{w_1}{w_2}\,x_1 - \frac{b}{w_2}
+$$
+
+This is a **line** in 2D. With $n$ inputs it generalises to a **hyperplane** in
+$n$-dimensional space — exactly the translucent plane you see in the scene.
+
+<Callout type="note">
+A single perceptron can only classify **linearly separable** problems — those where a
+straight line (or hyperplane) separates the two classes. It cannot learn XOR. That
+limitation is what motivated stacking neurons into multi-layer networks.
+</Callout>
+
+## Learning: the perceptron update rule
+
+How does the perceptron learn? It adjusts each weight based on its mistakes:
+
+$$
+w_i \;\leftarrow\; w_i + \eta\,(y_{\text{true}} - y_{\text{pred}})\,x_i
+$$
+
+$$
+b \;\leftarrow\; b + \eta\,(y_{\text{true}} - y_{\text{pred}})
+$$
+
+where $\eta$ (eta) is the **learning rate** — the step size taken on each update.
+
+- If the prediction is **correct**, $y_{\text{true}} - y_{\text{pred}} = 0$ → no update.
+- If the neuron **missed** a positive example, weights on its active inputs are nudged up.
+- If the neuron **falsely fired**, they are nudged down.
+
+<CodeBlock language="python">
+{`def train_perceptron(X, y, lr=0.1, epochs=10):
+    """Rosenblatt perceptron training (1957)."""
+    w = np.zeros(X.shape[1])
+    b = 0.0
+
+    for epoch in range(epochs):
+        for xi, yi in zip(X, y):
+            pred = int(np.dot(w, xi) + b >= 0)
+            error = yi - pred
+            w += lr * error * xi   # update rule
+            b += lr * error
+
+    return w, b
+
+# Example: learn to classify points above/below y=0.5
+X = np.array([[0.2, 0.8], [0.9, 0.1], [0.3, 0.6], [0.7, 0.2]])
+y = np.array([1,           0,           1,           0])
+w, b = train_perceptron(X, y)
+print(f"Learned: w={w}, b={b:.3f}")`}
+</CodeBlock>
+
+<Callout type="tip">
+This simple update rule is the direct ancestor of **gradient descent**. Instead of the
+binary error $y_{\text{true}} - y_{\text{pred}}$, modern networks use a differentiable
+loss and move weights in the direction of the negative gradient.
+</Callout>
+
+## Activation functions
+
+The step function is not differentiable, which blocks gradient-based learning. Modern
+networks use smooth alternatives:
+
+| Function | Formula | Range | Use |
+|---|---|---|---|
+| Step (Heaviside) | $\mathbb{1}[z \geq 0]$ | $\{0,1\}$ | Original perceptron |
+| Sigmoid | $\displaystyle\frac{1}{1+e^{-z}}$ | $(0,1)$ | Binary classification output |
+| Tanh | $\tanh(z)$ | $(-1,1)$ | Zero-centred hidden layers |
+| ReLU | $\max(0,\,z)$ | $[0,\infty)$ | Hidden layers (current default) |
+| GELU | $z\,\Phi(z)$ | $(-\infty,\infty)$ | Transformers (BERT, GPT) |
+
+ReLU dominates modern architectures because it is cheap to compute, its gradient is
+constant (1 for $z>0$), and it does not saturate — unlike sigmoid and tanh which squash
+large values into flat regions where gradients vanish.
+
+## What a perceptron cannot do
+
+The perceptron **cannot** learn XOR. The four points $(0,0)=0$, $(0,1)=1$, $(1,0)=1$,
+$(1,1)=0$ cannot be separated by a single line — no matter how you orient it, two
+differently-labelled points will always end up on the same side.
+
+This limitation, identified by Minsky and Papert in their 1969 book *Perceptrons*, sent AI
+research into a decade-long "winter". The solution: **stack perceptrons** into a
+**multi-layer perceptron (MLP)**. Hidden layers apply nonlinear transformations that bend
+the input space into a shape where a final linear boundary can separate any pattern.
+
+That's the next article.
+
+## Summary
+
+$$
+\underbrace{\mathbf{x}}_{\text{inputs}}
+\xrightarrow{\;\mathbf{w},\,b\;}
+\underbrace{z = \mathbf{w}^{\top}\mathbf{x} + b}_{\text{pre-activation}}
+\xrightarrow{\;\sigma\;}
+\underbrace{y}_{\text{output}}
+$$
+
+- One neuron = one weighted sum + one activation.
+- The decision boundary is the hyperplane where the weighted sum equals zero.
+- The perceptron update rule moves the boundary closer to correct classification.
+- Smooth activations (ReLU, sigmoid) make training with gradient descent possible.
