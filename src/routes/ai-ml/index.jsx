@@ -44,8 +44,36 @@ const ML_ROUTES = [
     path: '/ai-ml/transformer',
     title: 'Transformer Block',
     desc: 'Stacked attention + feedforward layers with residual connections — the full block in 3D.',
-    status: 'coming-soon',
+    status: 'live',
     tags: ['transformers', 'architecture'],
+  },
+  {
+    path: '/ai-ml/moe',
+    title: 'Mixture of Experts',
+    desc: 'A gating network routes each token to just 2 of 8 experts. Sparse activation scales models to trillions of parameters.',
+    status: 'live',
+    tags: ['transformers', 'scaling'],
+  },
+  {
+    path: '/ai-ml/rag',
+    title: 'Retrieval-Augmented Generation',
+    desc: 'Query embeddings, cosine similarity, and vector databases — how LLMs retrieve facts before generating answers.',
+    status: 'live',
+    tags: ['rag', 'nlp', 'retrieval'],
+  },
+  {
+    path: '/ai-ml/lora',
+    title: 'LoRA — Low-Rank Adaptation',
+    desc: 'Freeze the base model and learn two tiny adapter matrices. Train < 0.1% of parameters to adapt a 70B model.',
+    status: 'live',
+    tags: ['fine-tuning', 'peft', 'lora'],
+  },
+  {
+    path: '/ai-ml/fine-tuning',
+    title: 'Fine-Tuning',
+    desc: 'Walk the loss landscape from pre-trained plateau to task-specific valley. SFT, RLHF, and DPO explained.',
+    status: 'live',
+    tags: ['fine-tuning', 'rlhf', 'sft'],
   },
 ];
 

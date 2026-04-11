@@ -1,0 +1,168 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## The sparsity problem
+
+Scaling a language model is simple in principle: more parameters, better performance.
+But the naive approach — doubling the FFN width or adding more transformer blocks — doubles
+the compute on every single token.
+
+**Mixture of Experts (MoE)** breaks this coupling. A MoE layer contains $N$ expert
+sub-networks (usually FFNs) but routes each token through only $k$ of them ($k \ll N$).
+You get the *capacity* of a model with $N \times$ more FFN parameters at roughly the same
+inference *cost*.
+
+The 3D scene above shows this: 8 expert blocks sit in the grid, but only 2 light up for
+the input token. Scroll to watch the router fire and the signal flow through the selected
+experts.
+
+<Callout type="note">
+GPT-4, Mixtral 8×7B, and Switch Transformer all use MoE layers. A Mixtral 8×7B model has
+the parameter count of a 47B-parameter dense model but uses roughly 13B active parameters
+per forward pass — similar to a 13B dense model in runtime cost.
+</Callout>
+
+## How the gating network works
+
+The **gating network** (router) is a simple linear layer $W_g \in \mathbb{R}^{d \times N}$
+that takes the token embedding and produces one score per expert:
+
+$$
+\mathbf{g}(x) = \text{Softmax}\!\left(x\,W_g\right) \in \mathbb{R}^N
+$$
+
+Then **Top-K selection** keeps only the $k$ highest-scoring experts and zeroes the rest:
+
+$$
+G(x) = \text{TopK}\!\left(\text{Softmax}\!\left(x\,W_g\right),\; k\right)
+$$
+
+The final output is a **weighted sum** of the selected experts:
+
+$$
+y = \sum_{i=1}^{N} G(x)_i \cdot E_i(x)
+$$
+
+Since $G(x)$ is sparse (only $k$ non-zero entries), only $k$ expert FFNs execute — the
+rest are skipped entirely.
+
+<CodeBlock language="python">
+{`import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class MoELayer(nn.Module):
+    def __init__(self, d_model=512, d_ff=2048, n_experts=8, top_k=2):
+        super().__init__()
+        self.top_k = top_k
+        self.router = nn.Linear(d_model, n_experts, bias=False)
+        self.experts = nn.ModuleList([
+            nn.Sequential(nn.Linear(d_model, d_ff), nn.GELU(),
+                          nn.Linear(d_ff, d_model))
+            for _ in range(n_experts)
+        ])
+
+    def forward(self, x):
+        # x: (batch, seq_len, d_model)
+        B, T, D = x.shape
+        x_flat = x.view(-1, D)                       # (B*T, D)
+
+        logits = self.router(x_flat)                 # (B*T, N)
+        gates, indices = logits.topk(self.top_k)     # top-k scores + expert ids
+        gates = F.softmax(gates, dim=-1)             # normalise among selected
+
+        output = torch.zeros_like(x_flat)
+        for k in range(self.top_k):
+            expert_id = indices[:, k]                # which expert for each token
+            for i, expert in enumerate(self.experts):
+                mask = (expert_id == i)              # tokens routed to expert i
+                if mask.any():
+                    output[mask] += gates[mask, k:k+1] * expert(x_flat[mask])
+
+        return output.view(B, T, D)`}
+</CodeBlock>
+
+## The load balancing problem
+
+Naïve MoE training collapses: the router learns to always send every token to the same
+one or two experts, leaving the rest idle. This **expert collapse** wastes capacity.
+
+The solution is an **auxiliary load-balancing loss** that penalises uneven routing:
+
+$$
+\mathcal{L}_{\text{aux}} = \alpha \cdot N \cdot \sum_{i=1}^{N} f_i \cdot P_i
+$$
+
+Where:
+- $f_i$ = fraction of tokens dispatched to expert $i$ in a batch
+- $P_i$ = average router probability assigned to expert $i$
+- $\alpha$ = a small coefficient (e.g., $10^{-2}$) so the aux loss doesn't dominate
+
+Minimising $\sum f_i \cdot P_i$ pushes both the dispatch fractions and the router
+probabilities to be uniform — encouraging every expert to be used equally.
+
+<Callout type="warning">
+Getting load balancing right is the hardest part of MoE training. Too much auxiliary
+loss → router ignores token content. Too little → expert collapse. Typical values of
+$\alpha$ range from $10^{-3}$ to $10^{-2}$.
+</Callout>
+
+## Expert parallelism
+
+In practice, each expert lives on a different device (GPU/TPU). The router decides where
+to send each token, the token data is **all-to-all communicated** across devices, each
+device runs its expert FFN, and results are gathered back:
+
+```
+Device 1: Expert 1, Expert 2
+Device 2: Expert 3, Expert 4
+Device 3: Expert 5, Expert 6
+Device 4: Expert 7, Expert 8
+
+Each token → router → dispatch to 2 devices → expert compute → gather → aggregate
+```
+
+This is called **expert parallelism** and is orthogonal to tensor and pipeline
+parallelism used in dense models.
+
+<CodeBlock language="python">
+{`# Switch Transformer style — top-1 routing with capacity factor
+class SwitchLayer(nn.Module):
+    def __init__(self, d_model, d_ff, n_experts, capacity_factor=1.25):
+        super().__init__()
+        self.router = nn.Linear(d_model, n_experts, bias=False)
+        self.experts = nn.ModuleList([
+            nn.Sequential(nn.Linear(d_model, d_ff), nn.ReLU(),
+                          nn.Linear(d_ff, d_model))
+            for _ in range(n_experts)
+        ])
+        # capacity_factor * (tokens / n_experts) = max tokens per expert
+        self.capacity_factor = capacity_factor`}
+</CodeBlock>
+
+## MoE in practice
+
+| Model | Experts | Top-K | Active Params | Total Params |
+|---|---|---|---|---|
+| Switch Transformer | 2048 | 1 | ~7B | ~1.6T |
+| GLaM | 64 | 2 | ~97B | ~1.2T |
+| Mixtral 8×7B | 8 | 2 | ~13B | ~47B |
+| Mixtral 8×22B | 8 | 2 | ~39B | ~141B |
+| (Rumoured) GPT-4 | 16 | 2 | ~111B | ~1.8T |
+
+<Callout type="tip">
+For inference, MoE models are memory-intensive (you must load all experts) but
+compute-efficient (only top-k fire per token). They shine on multi-GPU servers where each
+expert fits on a different GPU, but struggle on single-GPU inference where all experts
+must fit in VRAM at once.
+</Callout>
+
+## Trade-offs summary
+
+| Aspect | Dense FFN | MoE FFN |
+|---|---|---|
+| Parameters | $d \times 4d$ | $N \times d \times 4d$ |
+| FLOPs per token | $\propto d^2$ | $\propto k/N \cdot d^2$ |
+| Memory (inference) | Low | High (all experts loaded) |
+| Expert collapse | N/A | Must handle with aux loss |
+| Communication | None | All-to-all per layer |

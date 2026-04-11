@@ -1,0 +1,193 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## The building block of every LLM
+
+A **transformer block** is the repeating unit stacked dozens or hundreds of times inside
+GPT, BERT, LLaMA, and every other large language model.
+
+Each block takes a sequence of token representations and returns an updated sequence of
+the same shape. Two sublayers do the work:
+
+1. **Multi-Head Self-Attention** — lets every token attend to every other token
+2. **Feed-Forward Network** — applies a non-linear transformation to each token independently
+
+Each sublayer is wrapped by a **residual connection** and **layer normalisation**, which
+are the white dashed lines in the 3D scene above.
+
+<Callout type="note">
+Scroll to watch the signal flow: attention connections fan out first, then the FFN
+activates, then output tokens brighten. The dashed residual lines bypass both sublayers —
+this is what makes deep transformers trainable.
+</Callout>
+
+## Self-attention — what it really does
+
+At its core, self-attention answers the question: *for each token, how much should I look
+at every other token?*
+
+Each token representation $\mathbf{x}_i$ is linearly projected into three vectors:
+
+$$
+\mathbf{q}_i = \mathbf{x}_i W^Q, \quad
+\mathbf{k}_i = \mathbf{x}_i W^K, \quad
+\mathbf{v}_i = \mathbf{x}_i W^V
+$$
+
+The **query** ($\mathbf{q}$) asks a question; the **key** ($\mathbf{k}$) advertises an
+answer; the **value** ($\mathbf{v}$) carries the content.
+
+Attention weights are then computed as a scaled dot-product:
+
+$$
+\text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
+= \text{softmax}\!\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}}\right)\mathbf{V}
+$$
+
+The $\sqrt{d_k}$ factor prevents the dot products from growing so large that softmax
+saturates into a near-one-hot distribution — leaving gradients tiny and learning stalled.
+
+## Multi-head attention
+
+A single attention head is limited to one "type" of relationship. **Multi-head attention**
+runs $h$ heads in parallel, each with its own $W^Q_i$, $W^K_i$, $W^V_i$ matrices:
+
+$$
+\text{MultiHead}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
+= \text{Concat}(\text{head}_1, \ldots, \text{head}_h)\,W^O
+$$
+
+$$
+\text{where } \text{head}_i = \text{Attention}(\mathbf{Q}W^Q_i,\, \mathbf{K}W^K_i,\, \mathbf{V}W^V_i)
+$$
+
+Different heads learn to specialise: one tracks subject-verb agreement, another learns
+coreference, another picks up positional patterns.
+
+<CodeBlock language="python">
+{`import torch
+import torch.nn.functional as F
+
+def scaled_dot_product_attention(Q, K, V, mask=None):
+    d_k = Q.shape[-1]
+    scores = (Q @ K.transpose(-2, -1)) / d_k ** 0.5  # (B, h, T, T)
+    if mask is not None:
+        scores = scores.masked_fill(mask == 0, float('-inf'))
+    weights = F.softmax(scores, dim=-1)               # attention distribution
+    return weights @ V                                # weighted sum of values
+
+# GPT-2 uses h=12 heads, d_model=768, d_k = d_model/h = 64
+# Each head attends over a 64-dim subspace of the 768-dim representation`}
+</CodeBlock>
+
+## The feed-forward sublayer
+
+After attention mixes information across tokens, the FFN processes each token
+*independently* — the same transformation applied position-by-position:
+
+$$
+\text{FFN}(\mathbf{x}) = \max(0,\; \mathbf{x}\,W_1 + b_1)\,W_2 + b_2
+$$
+
+The inner dimension $d_{\text{ff}}$ is typically $4 \times d_{\text{model}}$ (e.g., 3072
+for GPT-2 with $d_{\text{model}} = 768$). This expansion-and-contraction lets the network
+store and retrieve a rich set of "facts" from training.
+
+<Callout type="tip">
+The FFN is where most of a transformer's factual knowledge is stored. Experiments
+removing FFN layers while keeping attention show that factual recall degrades sharply —
+even when in-context reasoning remains intact.
+</Callout>
+
+## Residual connections and layer normalisation
+
+Each sublayer is wrapped in:
+
+$$
+\mathbf{x} \leftarrow \text{LayerNorm}(\mathbf{x} + \text{Sublayer}(\mathbf{x}))
+$$
+
+**Residual connections** (the `+ x`) give the gradient a direct path backward through
+any depth of network, preventing vanishing gradients. The network learns *residual
+corrections* on top of the identity — much easier than learning the full transformation
+from scratch.
+
+**Layer normalisation** normalises each token's representation independently across the
+hidden dimension:
+
+$$
+\text{LayerNorm}(\mathbf{x}) = \frac{\mathbf{x} - \mu}{\sigma + \varepsilon} \odot \gamma + \beta
+$$
+
+This stabilises the distribution of activations, allowing higher learning rates and
+faster convergence.
+
+## Stacking blocks — depth vs width
+
+A single transformer block captures only a limited range of interactions. Stacking $N$
+blocks lets the model compose operations:
+
+| Block | What it can model |
+|---|---|
+| 1 | Direct token-to-token relations |
+| 2 | Two-hop relations (A→B→C) |
+| N | N-hop compositional reasoning |
+
+GPT-2 uses $N = 12$ blocks. GPT-3 uses $N = 96$. LLaMA-3 70B uses $N = 80$.
+
+<CodeBlock language="python">
+{`import torch.nn as nn
+
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model=768, n_heads=12, d_ff=3072, dropout=0.1):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout,
+                                           batch_first=True)
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, d_ff),
+            nn.GELU(),
+            nn.Linear(d_ff, d_model),
+            nn.Dropout(dropout),
+        )
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+
+    def forward(self, x, mask=None):
+        # Attention sublayer + residual
+        attn_out, _ = self.attn(x, x, x, attn_mask=mask)
+        x = self.norm1(x + attn_out)
+        # FFN sublayer + residual
+        x = self.norm2(x + self.ffn(x))
+        return x`}
+</CodeBlock>
+
+## From block to model
+
+A full transformer model is:
+
+1. **Embedding layer** — maps token IDs to $d_{\text{model}}$-dimensional vectors
+2. **Positional encoding** — adds position information (sinusoidal or learned)
+3. **$N$ transformer blocks** — the repeating units we just built
+4. **Output head** — maps the final token representations to vocabulary logits
+
+| Model | Blocks | $d_{\text{model}}$ | Heads | Params |
+|---|---|---|---|---|
+| GPT-2 | 12 | 768 | 12 | 117M |
+| GPT-3 | 96 | 12288 | 96 | 175B |
+| LLaMA-3 8B | 32 | 4096 | 32 | 8B |
+| LLaMA-3 70B | 80 | 8192 | 64 | 70B |
+
+<Callout type="tip">
+The Mixture of Experts (MoE) architecture replaces the single FFN in each block with
+multiple "expert" FFNs, activating only 1–2 per token. This lets models scale parameters
+without proportionally scaling compute. That's the next article.
+</Callout>
+
+## What's next
+
+The transformer block is the foundation. The following articles build on it:
+
+- **Mixture of Experts** — scale the FFN without scaling compute
+- **LoRA** — fine-tune a transformer by training only tiny adapter matrices
+- **Fine-Tuning** — adapt a pre-trained transformer to your task
+- **RAG** — give the transformer access to external knowledge at inference time

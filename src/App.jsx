@@ -12,6 +12,11 @@ import AiMl from './routes/ai-ml/index.jsx';
 // Blog articles
 import IntroToLinearAlgebra from './routes/intro-to-linear-algebra/index.jsx';
 import Perceptron from './routes/ai-ml/perceptron/index.jsx';
+import Transformer from './routes/ai-ml/transformer/index.jsx';
+import Moe from './routes/ai-ml/moe/index.jsx';
+import Rag from './routes/ai-ml/rag/index.jsx';
+import Lora from './routes/ai-ml/lora/index.jsx';
+import FineTuning from './routes/ai-ml/fine-tuning/index.jsx';
 
 export default function App() {
   return (
@@ -25,6 +30,11 @@ export default function App() {
           <Route path="/ai-ml" element={<AiMl />} />
           <Route path="/intro-to-linear-algebra" element={<IntroToLinearAlgebra />} />
           <Route path="/ai-ml/perceptron" element={<Perceptron />} />
+          <Route path="/ai-ml/transformer" element={<Transformer />} />
+          <Route path="/ai-ml/moe" element={<Moe />} />
+          <Route path="/ai-ml/rag" element={<Rag />} />
+          <Route path="/ai-ml/lora" element={<Lora />} />
+          <Route path="/ai-ml/fine-tuning" element={<FineTuning />} />
         </Routes>
         <Footer />
       </ScrollProvider>

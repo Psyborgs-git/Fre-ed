@@ -1,0 +1,183 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## What fine-tuning is and isn't
+
+Pre-training builds a general model. It ingests hundreds of billions of tokens and learns
+the statistical structure of language — grammar, facts, reasoning patterns, code conventions.
+The result is a model that can continue text in a wide variety of styles and domains.
+
+**Fine-tuning** adjusts those weights further on a smaller, targeted dataset so that the model
+excels at a specific task or follows a particular format. It is **not** teaching the model
+new knowledge from scratch — it is steering an already-capable model toward a desired behaviour.
+
+Common fine-tuning goals:
+- **Instruction following:** answering questions in a helpful, concise way (GPT-3 → InstructGPT)
+- **Domain specialisation:** medical transcription, legal Q&A, code generation
+- **Style alignment:** matching a brand voice or persona
+- **Task adaptation:** classification, summarisation, structured output
+
+<Callout type="note">
+The 3D scene maps this intuition: the broad plateau is the pre-trained loss minimum (good on
+many things, not great on yours); the sharp valley is the fine-tuned minimum. Gradient descent
+rolls the model from plateau to valley. Scroll to watch the path unfold.
+</Callout>
+
+## The pre-training and fine-tuning pipeline
+
+```
+Raw text corpus (TB scale)
+        ↓
+  [ Pre-training ]   ← Self-supervised next-token prediction on general data
+        ↓
+  Foundation model   ← Encodes broad world knowledge
+        ↓
+  [ Fine-tuning ]    ← Supervised on labelled task data (10K–1M examples)
+        ↓
+  Task model         ← Specialised behaviour, same architecture
+```
+
+Fine-tuning modifies all weights (full fine-tuning) or a subset (PEFT — see LoRA article).
+The learning rate is typically 10–100× smaller than pre-training to avoid overwriting learned
+representations.
+
+## Supervised fine-tuning (SFT)
+
+The simplest fine-tuning variant: given an input $x$ and desired output $y$, minimise the
+negative log-likelihood of $y$ conditioned on $x$:
+
+$$
+\mathcal{L}_{\text{SFT}} = -\sum_{t=1}^{T} \log P_\theta(y_t \mid x, y_{<t})
+$$
+
+For chat models the input includes the conversation history; only the assistant turns contribute
+to the loss (user tokens are masked out so the model does not learn to "speak for the user").
+
+<CodeBlock language="python">
+{`from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from trl import SFTTrainer
+
+model     = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B")
+
+# dataset: list of {"prompt": ..., "completion": ...} dicts
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    dataset_text_field="text",   # already formatted as <prompt>\\n<completion>
+    max_seq_length=2048,
+    args=TrainingArguments(
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=8,
+        num_train_epochs=3,
+        learning_rate=2e-5,           # ~100x lower than pre-training LR
+        lr_scheduler_type="cosine",
+        warmup_ratio=0.03,
+        bf16=True,
+        output_dir="./sft-output",
+    ),
+)
+trainer.train()`}
+</CodeBlock>
+
+## Instruction tuning and chat models
+
+Instruction tuning is SFT on a dataset of `(instruction, response)` pairs. The key insight
+from InstructGPT (2022) was that **a relatively small set of high-quality demonstrations**
+(~13K examples) can dramatically improve instruction-following compared to a model fine-tuned
+on raw completion data.
+
+Modern chat models use structured prompt templates to separate roles:
+
+<CodeBlock language="text">
+{`<|system|>
+You are a helpful assistant.
+
+<|user|>
+Explain LoRA in one paragraph.
+
+<|assistant|>
+LoRA freezes the base model and adds two small adapter matrices A and B...`}
+</CodeBlock>
+
+Popular open instruction datasets include:
+- **Alpaca** (52K GPT-3.5 self-instruct)
+- **OpenHermes** (1M synthetic GPT-4 instructions)
+- **ShareGPT** (human–ChatGPT conversations)
+- **FLAN** (1,800 task templates across 62 NLP benchmarks)
+
+## RLHF — Reinforcement Learning from Human Feedback
+
+SFT produces a model that imitates demonstrations. **RLHF** (Christiano et al., 2017;
+OpenAI InstructGPT, 2022) goes further: it trains the model to maximise human preference scores.
+
+The three-stage pipeline:
+
+```
+Stage 1 — SFT
+  Train on curated (prompt, response) pairs as above.
+
+Stage 2 — Reward model
+  Collect comparisons: given a prompt, human raters rank k responses.
+  Train a scalar reward model R_φ(x, y) to predict the preferred response.
+  Loss: L_RM = -E[ log σ( R_φ(x, y_w) - R_φ(x, y_l) ) ]
+  (y_w = preferred, y_l = less preferred)
+
+Stage 3 — PPO fine-tuning
+  Optimise the policy π_θ to maximise R_φ while staying close to the SFT model:
+  L_PPO = E[ R_φ(x, y) - β · KL(π_θ(y|x) ‖ π_SFT(y|x)) ]
+  (β is a penalty coefficient that prevents reward hacking)
+```
+
+<Callout type="tip">
+**DPO (Direct Preference Optimisation)**, introduced in 2023, skips the separate reward model
+entirely. It directly fine-tunes on preference pairs using the optimal closed-form policy
+update — simpler to implement and often matches PPO quality.
+
+$$
+\mathcal{L}_{\text{DPO}} = -\mathbb{E}\left[\log \sigma\!\left(
+  \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)}
+  - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)}
+\right)\right]
+$$
+</Callout>
+
+## Catastrophic forgetting and mitigations
+
+When a model is fine-tuned on a narrow dataset, its weights shift to minimise that task's
+loss — potentially overwriting previously learned capabilities. This is **catastrophic
+forgetting**.
+
+Practical mitigations:
+
+| Strategy | How | Trade-off |
+|---|---|---|
+| **Low LR** | Use $10^{-5}$–$2 \times 10^{-5}$ | Slower adaptation |
+| **Replay / mixed training** | Mix fine-tune data with a sample of pre-train data | 2× data cost |
+| **PEFT (LoRA, adapters)** | Freeze base weights; only train adapters | Lower capacity |
+| **Regularisation (EWC)** | Penalise changes to weights important for prior tasks | Extra computation |
+| **Checkpoint averaging** | Average SFT checkpoint with base checkpoint | Quality may drop slightly |
+
+<Callout type="warning">
+Aggressive fine-tuning on synthetic or low-diversity data is a common cause of **alignment
+tax** — the model's instruction-following improves but its factual accuracy or reasoning
+ability regresses. Always evaluate on held-out benchmarks (MMLU, GSM8K, HumanEval) before
+deploying.
+</Callout>
+
+## Fine-tuning vs prompting vs RAG — decision guide
+
+| Situation | Recommended approach |
+|---|---|
+| Need task-specific **output format** (JSON, XML, code) | Fine-tuning or few-shot prompting |
+| Need up-to-date **external knowledge** | RAG |
+| Need **style / persona** changes | Fine-tuning |
+| Knowledge is static and fits in context | Few-shot prompting |
+| Limited GPU budget | LoRA / QLoRA fine-tuning |
+| Need to **switch tasks** rapidly | PEFT adapters (keep base frozen) |
+| Strong base model already follows instructions well | Prompting first; fine-tune only if prompting plateaus |
+
+The practical heuristic: **prompt first, RAG second, fine-tune last**. Fine-tuning is
+powerful but expensive in data collection and compute. Exhausting prompting and retrieval
+options before fine-tuning saves time in most production pipelines.
