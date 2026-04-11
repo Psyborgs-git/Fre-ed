@@ -35,7 +35,7 @@ export default function About() {
           <ul>
             <li>Self-taught developers who learn by doing</li>
             <li>CS and ML students who want intuition, not just formulas</li>
-            <li>Curious engineers who've wondered "but what does it <em>look</em> like?"</li>
+            <li>Curious engineers who&apos;ve wondered &quot;but what does it <em>look</em> like?&quot;</li>
           </ul>
 
           <h2>The tech</h2>

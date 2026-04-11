@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -30,8 +30,6 @@ const PATH_POINTS = [
 // ── Loss Landscape Mesh ───────────────────────────────────────────
 
 function LossTerrain() {
-  const geomRef = useRef();
-
   const geometry = useMemo(() => {
     const segs = 40;
     const geo  = new THREE.PlaneGeometry(8, 8, segs, segs);

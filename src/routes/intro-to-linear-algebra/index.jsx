@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy } from 'react';
 import RouteLayout from '../../components/RouteLayout.jsx';
 import { meta } from './meta.js';
 import Page from './Page.mdx';

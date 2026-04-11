@@ -1,7 +1,6 @@
-import { useRef, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
-import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
 
 // ── Constants ─────────────────────────────────────────────────────

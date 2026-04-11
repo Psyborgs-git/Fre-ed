@@ -1,13 +1,11 @@
 import { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
-import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
 
 // ── Expert grid layout — 2 rows × 4 cols ─────────────────────────
 const N_EXPERTS = 8;
 const EXPERT_COLS = 4;
-const EXPERT_ROWS = 2;
 // Which two experts the router selects (top-k = 2)
 const SELECTED = new Set([1, 5]);
 
@@ -49,7 +47,7 @@ function Router({ progress }) {
   const ref = useRef();
   const t = Math.max(0, (progress - 0.15) / 0.3);
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     if (!ref.current) return;
     ref.current.rotation.y += 0.01;
     ref.current.material.emissiveIntensity = t * 0.5;
@@ -74,7 +72,6 @@ function Router({ progress }) {
 
 function ExpertGrid({ progress }) {
   const gateT = Math.max(0, (progress - 0.4) / 0.3); // when gating fires
-  const flowT = Math.max(0, (progress - 0.65) / 0.3); // when signal flows
 
   return (
     <group>
