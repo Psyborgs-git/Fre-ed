@@ -252,8 +252,9 @@
     width: min(100%, 1600px);
     margin-inline: auto;
     display: grid;
-    grid-template-rows: 1fr 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
     height: calc(100svh - 3.5rem);
+    transition: grid-template-rows 0.24s ease;
     background:
       radial-gradient(circle at top left, color-mix(in srgb, var(--accent-violet) 12%, transparent), transparent 36%),
       radial-gradient(circle at top right, color-mix(in srgb, var(--accent-cyan) 14%, transparent), transparent 42%),
@@ -268,8 +269,10 @@
 
   .lesson-scene-panel {
     position: relative;
+    min-height: 0;
     overflow: hidden;
     border-bottom: 1px solid var(--line);
+    transition: opacity 0.22s ease, border-color 0.22s ease;
     background:
       radial-gradient(circle at top left, rgba(167, 139, 250, 0.16), transparent 34%),
       radial-gradient(circle at top right, rgba(34, 211, 238, 0.18), transparent 42%),
@@ -354,12 +357,96 @@
     pointer-events: none;
   }
 
+  .lesson-scene-scrubber {
+    position: absolute;
+    left: 50%;
+    bottom: 1rem;
+    z-index: 13;
+    width: min(36rem, calc(100% - 2rem));
+    transform: translateX(-50%);
+    padding: 0.85rem 1rem 0.9rem;
+    border-radius: 1.35rem;
+    border: 1px solid rgba(34, 211, 238, 0.22);
+    background: rgba(10, 10, 15, 0.78);
+    color: rgba(226, 232, 240, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 12px 40px rgba(3, 7, 18, 0.3);
+  }
+
+  .lesson-scene-scrubber__header,
+  .lesson-scene-scrubber__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .lesson-scene-scrubber__header {
+    margin-bottom: 0.55rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .lesson-scene-scrubber__footer {
+    margin-top: 0.55rem;
+    font-size: 0.78rem;
+    color: rgba(226, 232, 240, 0.72);
+  }
+
+  .lesson-scene-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 1rem;
+    margin: 0;
+    cursor: ew-resize;
+    background: transparent;
+    accent-color: var(--accent-cyan);
+  }
+
+  .lesson-scene-range::-webkit-slider-runnable-track {
+    height: 0.4rem;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.9), rgba(167, 139, 250, 0.92));
+  }
+
+  .lesson-scene-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -6px;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    background: #f8fafc;
+    border: 2px solid var(--accent-cyan);
+    box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.18);
+  }
+
+  .lesson-scene-range::-moz-range-track {
+    height: 0.4rem;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.9), rgba(167, 139, 250, 0.92));
+  }
+
+  .lesson-scene-range::-moz-range-thumb {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--accent-cyan);
+    border-radius: 9999px;
+    background: #f8fafc;
+    box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.18);
+  }
+
   .lesson-content-panel {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable both-edges;
     padding: 0 1rem 2rem;
+    transition: opacity 0.22s ease, padding 0.22s ease;
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--accent-cyan) 4%, var(--bg-base)), var(--bg-base) 14rem);
   }
@@ -407,11 +494,126 @@
     color: var(--ink-lo);
   }
 
+  .lesson-panel-controls {
+    z-index: 15;
+  }
+
+  .lesson-panel-controls--scene {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+  }
+
+  .lesson-panel-controls--content {
+    position: sticky;
+    top: 0;
+    display: flex;
+    justify-content: flex-end;
+    width: min(100%, 78rem);
+    margin: 0 auto;
+    padding-top: 1rem;
+    padding-inline: 0.25rem;
+  }
+
+  .lesson-panel-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 0.95rem;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+  }
+
+  .lesson-panel-button:hover {
+    transform: translateY(-1px);
+  }
+
+  .lesson-panel-button:focus-visible,
+  .lesson-scene-range:focus-visible {
+    outline: 2px solid var(--accent-cyan);
+    outline-offset: 2px;
+  }
+
+  .lesson-panel-button--scene {
+    background: rgba(10, 10, 15, 0.72);
+    border-color: rgba(148, 163, 184, 0.24);
+    color: #f8fafc;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .lesson-panel-button--scene:hover {
+    border-color: rgba(34, 211, 238, 0.32);
+    color: #67e8f9;
+  }
+
+  .lesson-panel-button--content {
+    background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+    border-color: color-mix(in srgb, var(--line) 88%, transparent);
+    color: var(--ink-hi);
+    box-shadow: 0 10px 30px rgba(6, 10, 20, 0.08);
+  }
+
+  .lesson-panel-button--content:hover {
+    border-color: color-mix(in srgb, var(--accent-cyan) 34%, var(--line));
+    color: var(--accent-cyan);
+  }
+
+  .lesson-panel-button__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .lesson-shell--scene-full {
+    grid-template-rows: minmax(0, 1fr) 0px;
+  }
+
+  .lesson-shell--content-full {
+    grid-template-rows: 0px minmax(0, 1fr);
+  }
+
+  .lesson-shell--scene-full .lesson-scene-panel {
+    border-bottom-color: transparent;
+  }
+
+  .lesson-shell--scene-full .lesson-content-panel,
+  .lesson-shell--content-full .lesson-scene-panel {
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+  }
+
+  .lesson-shell--scene-full .lesson-scene-hint {
+    bottom: 7rem;
+  }
+
+  .lesson-shell--content-full .lesson-content-panel {
+    padding-top: 0.75rem;
+  }
+
+  .lesson-shell--content-full .lesson-article-card {
+    margin-top: 0.75rem;
+    border-radius: 1.75rem;
+    box-shadow: 0 20px 60px rgba(6, 10, 20, 0.18);
+  }
+
   @media (min-width: 768px) {
     .lesson-scene-meta {
       top: 1.5rem;
       left: 1.5rem;
       padding: 1.15rem 1.25rem;
+    }
+
+    .lesson-panel-controls--scene {
+      top: 1.5rem;
+      right: 1.5rem;
     }
 
     .lesson-content-panel {
@@ -426,6 +628,15 @@
 
     .lesson-article-card {
       margin-top: -3.75rem;
+    }
+
+    .lesson-shell--scene-full .lesson-scene-hint {
+      bottom: 1.5rem;
+      right: 1.5rem;
+    }
+
+    .lesson-shell--scene-full .lesson-scene-scrubber {
+      bottom: 1.5rem;
     }
   }
 

@@ -30,4 +30,5 @@ Every new `/src/routes/<path>/` **MUST** ship with matching `docs/pages/<path>.m
 
 - Lesson routes use a shared split-screen shell inspired by products like Brilliant: the upper half keeps the 3D visualization visible while the lower half behaves like a readable paper/blog surface.
 - Scroll progress is sourced from the article pane itself, so the scene animates even while the overall page stays visually stable.
+- Each lesson pane can temporarily expand into a focused full-height mode; the scene pane exposes a scrub bar in fullscreen so animation can still be controlled without the article pane.
 - Scene palettes should follow the design tokens in `docs/06-design-branding.md`, including theme-aware accent colors for axes, highlights, and helper geometry.

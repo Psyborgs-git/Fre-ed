@@ -19,6 +19,9 @@ every subsequent ML article on the site.
   OrbitControls let the user explore freely. No forced camera movement.
 - **Lesson shell:** The scene stays pinned in the upper pane while the article scrolls in the lower
   reading pane, mirroring the “visual always in view” rhythm of modern educational products.
+- **Alternate modes:** Both panes expose a focus/fullscreen action. Scene fullscreen keeps the
+  canvas in view and replaces scroll-driven progression with an on-canvas scrub bar; content
+  fullscreen gives the article a distraction-free reading state.
 - **Key objects:**
   - Cyan arrow → x-axis basis vector î
   - Violet arrow → y-axis basis vector ĵ
@@ -42,6 +45,8 @@ every subsequent ML article on the site.
 | 100 % | All elements at peak opacity, plane tilted 45° | Same | Complete composition |
 
 **Scroll owner:** the lower article pane drives progress; the browser window itself should remain visually stable while reading.
+
+**Fullscreen behavior:** when the scene pane is expanded, the scrub bar becomes the primary progress controller and syncs back into the hidden article pane. `Esc` restores the split layout.
 
 ## 5. Content Outline (segment B)
 - H2: What is a vector?
@@ -79,6 +84,7 @@ every subsequent ML article on the site.
 - `prefers-reduced-motion`: scene still renders but non-essential auto-rotation pauses.
 - Keyboard: OrbitControls does not expose keyboard interactions; the lower article pane is focusable
   and scrollable with the keyboard
+- Scene fullscreen remains keyboard-exitable via `Esc`, and the scrub bar is exposed as a native range control
 
 ## 10. Open Questions / Future Work
 - Add a live slider to let users type a vector and see it appear in 3D
@@ -91,3 +97,4 @@ every subsequent ML article on the site.
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — basis vectors, scroll-linked amber vector, transformation plane |
 | 2026-04-11 | Fre-ed Team | Switched to a persistent top/bottom lesson shell, added chapter overlays, and themed the canvas palette for light/dark modes |
+| 2026-04-11 | Fre-ed Team | Added pane fullscreen controls and a scene scrub bar that controls animation progress while the canvas is focused |

@@ -1,7 +1,78 @@
-import { Suspense, useCallback, useEffect, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useScrollProgress } from '../lib/ScrollContext.jsx';
-import { getScrollableProgress } from '../lib/scrollProgress.js';
+import { getScrollTopForProgress, getScrollableProgress } from '../lib/scrollProgress.js';
 import TagPill from './TagPill.jsx';
+
+const LAYOUT_MODES = {
+  split: 'split',
+  scene: 'scene',
+  content: 'content',
+};
+
+function ExpandIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
+function CollapseIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="9 3 3 3 3 9" />
+      <polyline points="15 21 21 21 21 15" />
+      <line x1="3" y1="3" x2="10" y2="10" />
+      <line x1="21" y1="21" x2="14" y2="14" />
+    </svg>
+  );
+}
+
+function PanelToggleButton({ expanded, label, onClick, variant }) {
+  return (
+    <button
+      type="button"
+      className={`lesson-panel-button lesson-panel-button--${variant}`}
+      onClick={onClick}
+      aria-pressed={expanded}
+      aria-label={label}
+      title={label}
+    >
+      <span className="lesson-panel-button__icon">{expanded ? <CollapseIcon /> : <ExpandIcon />}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function getChapterIndex(progress, chapters) {
+  if (!chapters?.length) return 0;
+  return Math.min(Math.floor(progress * chapters.length), chapters.length - 1);
+}
 
 function SceneFallback() {
   return (
@@ -40,7 +111,7 @@ function SceneMetaOverlay({ meta }) {
  */
 function SceneChapterOverlay({ progress, chapters }) {
   if (!chapters?.length) return null;
-  const idx = Math.min(Math.floor(progress * chapters.length), chapters.length - 1);
+  const idx = getChapterIndex(progress, chapters);
 
   return (
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 pointer-events-none select-none">
@@ -72,10 +143,44 @@ function SceneChapterOverlay({ progress, chapters }) {
   );
 }
 
-function SceneHint() {
+function SceneHint({ sceneFullscreen }) {
+  const hint = sceneFullscreen
+    ? 'Drag to orbit · Use the scrub bar to animate'
+    : 'Drag to orbit · Scroll the lesson below to animate';
+
   return (
     <div className="lesson-scene-hint" aria-hidden="true">
-      Drag to orbit · Scroll the lesson below to animate
+      {hint}
+    </div>
+  );
+}
+
+function SceneScrubberOverlay({ progress, chapters, onScrub }) {
+  const idx = getChapterIndex(progress, chapters);
+  const currentChapter = chapters?.[idx] ?? 'Lesson progress';
+
+  return (
+    <div className="lesson-scene-scrubber">
+      <div className="lesson-scene-scrubber__header">
+        <span>Scrub animation</span>
+        <span>{Math.round(progress * 100)}%</span>
+      </div>
+
+      <input
+        className="lesson-scene-range"
+        type="range"
+        min="0"
+        max="1000"
+        step="1"
+        value={Math.round(progress * 1000)}
+        onChange={onScrub}
+        aria-label="Scrub lesson animation progress"
+      />
+
+      <div className="lesson-scene-scrubber__footer">
+        <span>{currentChapter}</span>
+        <span>Press Esc to restore split view</span>
+      </div>
     </div>
   );
 }
@@ -113,6 +218,10 @@ function SceneProgressBar({ progress }) {
 export default function RouteLayout({ Scene, children, meta, chapters }) {
   const { setProgress, progress } = useScrollProgress();
   const contentRef = useRef(null);
+  const [layoutMode, setLayoutMode] = useState(LAYOUT_MODES.split);
+
+  const isSceneFullscreen = layoutMode === LAYOUT_MODES.scene;
+  const isContentFullscreen = layoutMode === LAYOUT_MODES.content;
 
   const handleContentScroll = useCallback(() => {
     const el = contentRef.current;
@@ -121,14 +230,55 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
     setProgress(getScrollableProgress(el.scrollTop, el.scrollHeight, el.clientHeight));
   }, [setProgress]);
 
+  const syncProgressToContent = useCallback(
+    (nextProgress) => {
+      const el = contentRef.current;
+      if (el) {
+        el.scrollTop = getScrollTopForProgress(nextProgress, el.scrollHeight, el.clientHeight);
+      }
+
+      setProgress(nextProgress);
+    },
+    [setProgress]
+  );
+
+  const toggleSceneFullscreen = useCallback(() => {
+    setLayoutMode((current) => (current === LAYOUT_MODES.scene ? LAYOUT_MODES.split : LAYOUT_MODES.scene));
+  }, []);
+
+  const toggleContentFullscreen = useCallback(() => {
+    setLayoutMode((current) => (current === LAYOUT_MODES.content ? LAYOUT_MODES.split : LAYOUT_MODES.content));
+  }, []);
+
+  const handleSceneScrub = useCallback(
+    (event) => {
+      syncProgressToContent(Number(event.target.value) / 1000);
+    },
+    [syncProgressToContent]
+  );
+
   useEffect(() => {
     const el = contentRef.current;
     if (!el) return;
 
+    setLayoutMode(LAYOUT_MODES.split);
     window.scrollTo({ top: 0, behavior: 'auto' });
     el.scrollTop = 0;
     handleContentScroll();
   }, [handleContentScroll, meta?.title]);
+
+  useEffect(() => {
+    if (layoutMode === LAYOUT_MODES.split) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setLayoutMode(LAYOUT_MODES.split);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [layoutMode]);
 
   const sceneContent = Scene ? (
     <div className="lesson-scene-surface">
@@ -137,8 +287,12 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
       <Suspense fallback={<SceneFallback />}>
         <Scene />
       </Suspense>
-      <SceneHint />
-      <SceneChapterOverlay progress={progress} chapters={chapters} />
+      <SceneHint sceneFullscreen={isSceneFullscreen} />
+      {isSceneFullscreen ? (
+        <SceneScrubberOverlay progress={progress} chapters={chapters} onScrub={handleSceneScrub} />
+      ) : (
+        <SceneChapterOverlay progress={progress} chapters={chapters} />
+      )}
     </div>
   ) : null;
 
@@ -157,11 +311,27 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
 
   return (
     <div className="min-h-screen pt-14" style={{ background: 'var(--bg-base)' }}>
-      <section className="lesson-shell" aria-label="Interactive lesson layout">
+      <section
+        className={[
+          'lesson-shell',
+          isSceneFullscreen && 'lesson-shell--scene-full',
+          isContentFullscreen && 'lesson-shell--content-full',
+        ].filter(Boolean).join(' ')}
+        aria-label="Interactive lesson layout"
+      >
         <aside
           className="lesson-scene-panel"
-          aria-hidden="true"
+          aria-hidden={isContentFullscreen ? 'true' : undefined}
+          aria-label="Interactive lesson canvas"
         >
+          <div className="lesson-panel-controls lesson-panel-controls--scene">
+            <PanelToggleButton
+              expanded={isSceneFullscreen}
+              label={isSceneFullscreen ? 'Restore split view' : 'Expand scene'}
+              onClick={toggleSceneFullscreen}
+              variant="scene"
+            />
+          </div>
           {sceneContent}
         </aside>
 
@@ -169,9 +339,18 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
           ref={contentRef}
           className="lesson-content-panel"
           aria-label="Article content"
+          aria-hidden={isSceneFullscreen ? 'true' : undefined}
           onScroll={handleContentScroll}
-          tabIndex={0}
+          tabIndex={isSceneFullscreen ? -1 : 0}
         >
+          <div className="lesson-panel-controls lesson-panel-controls--content">
+            <PanelToggleButton
+              expanded={isContentFullscreen}
+              label={isContentFullscreen ? 'Restore split view' : 'Expand reading'}
+              onClick={toggleContentFullscreen}
+              variant="content"
+            />
+          </div>
           <article className="lesson-article-card">
             <ArticleHeader meta={meta} headingId="lesson-route-title" />
             <div className="prose-content px-6 pb-24 pt-2 md:px-8 lg:px-12">{children}</div>

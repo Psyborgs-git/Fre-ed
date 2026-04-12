@@ -6,7 +6,7 @@
 Every directory → static HTML. No SSR server.
 
 ### F2 — Two-Segment Page Model
-Segment A: persistent 3D lesson canvas. Segment B: scrollable content “paper”. Shared pane-based scroll progress keeps the canvas visible while readers move through the lesson.
+Segment A: persistent 3D lesson canvas. Segment B: scrollable content “paper”. Shared pane-based scroll progress keeps the canvas visible while readers move through the lesson. Both panes can expand into a focused fullscreen state; scene fullscreen swaps scroll-driving for a scrub bar.
 
 ### F3 — 3D Scene Engine
 - R3F + Three.js canvas per route

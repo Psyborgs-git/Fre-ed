@@ -38,6 +38,7 @@ Tailwind default 4px grid. Page max-width `72ch` for prose segment.
 - Route shell: fixed nav, upper canvas pane, lower scrollable article pane.
 - Content pane should feel like a readable paper/card surface with generous padding, rounded corners, and a strong visual seam between scene and prose.
 - The content pane, not the window, owns scroll progress for scene choreography.
+- Each pane should expose a compact focus/fullscreen control. When the scene is expanded, provide an on-canvas scrubber so the animation can still be explored without the reading pane.
 
 ## 3D Visual Language
 - Low-poly + clean PBR
@@ -66,6 +67,7 @@ Build in `/src/components`:
 - `prefers-reduced-motion` → disable scroll embellishment and freeze non-essential scene animations
 - Keyboard focus visible on all interactive elements
 - Split lesson panes must keep the reading surface keyboard-focusable and scrollable
+- Alternate interaction modes like scene fullscreen should remain keyboard-exitable (for example, `Esc` to restore split view)
 - `<Canvas>` wrapped with `aria-hidden` + labeled fallback
 
 ## Logo / Favicon

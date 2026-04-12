@@ -37,5 +37,7 @@ Playwright runs after build:
 - [ ] Mobile Safari scene renders
 - [ ] Keyboard nav through page
 - [ ] Split lesson shell keeps canvas visible while the article pane scrolls independently
+- [ ] Pane fullscreen controls restore correctly and `Esc` exits scene focus mode
+- [ ] Scene fullscreen scrub bar changes chapter/progress without desyncing the article pane
 - [ ] Dark mode colors pass contrast
 - [ ] All routes in sitemap
