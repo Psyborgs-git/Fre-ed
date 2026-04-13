@@ -94,7 +94,7 @@ function Neuron({ position, layerIdx, neuronIdx, progress }) {
 
 // ── Connections — forward (cyan) and backward gradient (amber) ────────
 
-function Connections({ fromIdx, _toIdx, fromPosns, toPosns, progress, learningRate }) {
+function Connections({ fromIdx, fromPosns, toPosns, progress, learningRate }) {
   // Forward connections appear at ~0–45%
   const fwdAppear = (fromIdx / (LAYERS.length - 1)) * 0.4;
   const fwdT = Math.max(0, Math.min(1, (progress - fwdAppear) / 0.2));
@@ -291,7 +291,6 @@ function SceneContent({ learningRate, reducedMotion }) {
         <Connections
           key={`c-${li}`}
           fromIdx={li}
-          _toIdx={li + 1}
           fromPosns={ALL_POSITIONS[li]}
           toPosns={ALL_POSITIONS[li + 1]}
           progress={progress}

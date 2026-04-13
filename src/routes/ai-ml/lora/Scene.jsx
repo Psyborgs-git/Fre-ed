@@ -139,11 +139,13 @@ function MultiplyLines({ progress, rank }) {
   const t = Math.max(0, (progress - 0.42) / 0.25);
   if (t < 0.02) return null;
 
+  const normalizedRankSpan = Math.max(rank - 1, 1); // keep the interpolation stable when rank is very small
+
   // Two rank nodes positioned at the bottleneck midpoint (x = 0)
   // Lines go from each A's rightmost column position to each B's leftmost column position
   const rankLines = [];
   for (let r = 0; r < rank; r++) {
-    const aRow = Math.min(A_ROWS - 1, Math.floor((r / Math.max(rank - 1, 1)) * (A_ROWS - 1)));
+    const aRow = Math.min(A_ROWS - 1, Math.floor((r / normalizedRankSpan) * (A_ROWS - 1)));
     const aPos = gridPos(aRow, rank - 1, A_ROWS, rank, A_GAP, -3.1 - Math.max(0, rank - 2) * 0.18, 0);
     // B matrix leftmost column (0), each rank row
     const bPos = gridPos(r, 0, rank, B_COLS, B_GAP, 3.1 + Math.max(0, rank - 2) * 0.18, 0);

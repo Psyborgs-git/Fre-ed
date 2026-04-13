@@ -76,6 +76,8 @@ function Neuron({ position, color, emissive, progress, layerIdx, neuronIdx, redu
 }
 
 // ── Connections between adjacent layers ──────────────────────────────
+// Each connection band is staged only by its index because the layer layout
+// itself is already encoded in the `fromPosns` and `toPosns` coordinates.
 
 function LayerConnections({ fromPosns, toPosns, progress, connIdx }) {
   // Connection band appears when the source layer activates

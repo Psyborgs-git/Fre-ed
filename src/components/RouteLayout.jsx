@@ -15,6 +15,7 @@ const LAYOUT_MODES = {
   scene: 'scene',
   content: 'content',
 };
+const DEFAULT_SCENE_CHAPTERS = ['Intro', 'Explore', 'Inspect', 'Recap'];
 
 function ExpandIcon() {
   return (
@@ -445,7 +446,10 @@ export default function RouteLayout({
     trackSceneReady(location.pathname);
   }, [Scene, location.pathname, shouldMountScene]);
 
-  const sceneChapters = useMemo(() => chapters?.length ? chapters : ['Intro', 'Explore', 'Inspect', 'Recap'], [chapters]);
+  const sceneChapters = useMemo(
+    () => (chapters?.length ? chapters : DEFAULT_SCENE_CHAPTERS),
+    [chapters]
+  );
 
   useEffect(() => {
     if (layoutMode === LAYOUT_MODES.split) return undefined;
