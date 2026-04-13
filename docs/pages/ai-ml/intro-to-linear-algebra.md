@@ -87,10 +87,10 @@ every subsequent ML article on the site.
 - Scene fullscreen remains keyboard-exitable via `Esc`, and the scrub bar is exposed as a native range control
 
 ## 10. Open Questions / Future Work
-- Add a live slider to let users type a vector and see it appear in 3D
+- Add matrix entry fields so readers can build arbitrary 3×3 transforms, not just presets
 - Add matrix multiplication demo: show how a matrix drags basis vectors to new positions
 - Animate eigen-decomposition as a stretch/squish along eigenvectors
-- Gate auto-rotation behind `prefers-reduced-motion` media query check
+- Add transformed basis-vector ghosts so the matrix action is even clearer at a glance
 
 ## 11. Changelog
 | Date | Author | Change |
@@ -98,3 +98,4 @@ every subsequent ML article on the site.
 | 2026-04-11 | Fre-ed Team | Initial implementation — basis vectors, scroll-linked amber vector, transformation plane |
 | 2026-04-11 | Fre-ed Team | Switched to a persistent top/bottom lesson shell, added chapter overlays, and themed the canvas palette for light/dark modes |
 | 2026-04-11 | Fre-ed Team | Added pane fullscreen controls and a scene scrub bar that controls animation progress while the canvas is focused |
+| 2026-04-13 | Fre-ed Team | Added vector sliders, matrix presets, transformed-vector overlays, and explicit reduced-motion handling |

@@ -70,15 +70,16 @@ merge adapters vs keep them separate.
 - Full LoRA algorithm explained textually in segment B including parameter count table and PyTorch code
 - Math formulas ΔW=BA, h=W₀x+BAx, α/r scaling all rendered via KaTeX
 - The visual size contrast (W 64 cells vs A+B 32 cells total) maps directly to the "0.20% trainable params" figure in the prose
-- No interactive elements
+- Rank controls now resize the adapter matrices in the shared scene control panel
 
 ## 10. Open Questions / Future Work
 - Add animated "gradient flow" showing only A and B receiving gradient arrows while W has none
 - Show SVD decomposition: animate decomposing ΔW into U, S, V and highlight the top-r singular values
-- Interactive rank slider: user adjusts r and sees A/B resize in real time with parameter count updating
+- Add parameter-count readouts that update alongside the live rank controls
 - Add DoRA (Weight-Decomposed Low-Rank Adaptation) variant comparison
 
 ## 11. Changelog
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — 8×8 W matrix, 8×2 A and 2×8 B adapters, multiply lines, delta overlay, QLoRA section |
+| 2026-04-13 | Fre-ed Team | Added live rank controls, shared legends/prompts, and reduced-motion aware camera behavior |

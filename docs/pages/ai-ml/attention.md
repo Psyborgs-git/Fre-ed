@@ -71,12 +71,12 @@ the transformer architecture.
 - `<Canvas>` has `aria-hidden="true"` — excluded from screen readers
 - Every visual element explained in segment B prose table
 - KaTeX math accessible via MathML output
-- No keyboard or pointer interaction in scene beyond OrbitControls (mouse/touch drag)
+- Token focus controls now let readers isolate one token row in the matrix with keyboard-accessible buttons
 - `prefers-reduced-motion`: animations driven by scroll progress (static at progress=0)
 
 ## 10. Open Questions / Future Work
 - Add token labels (floating text) so viewers can read "the", "cat", "sat" etc.
-- Add interactive: click a token to highlight its row of the attention matrix
+- Add multi-token compare mode so two attention rows can be inspected side-by-side
 - Show the position of multi-head attention — run two heads side-by-side with different colour schemes
 - Implement cross-attention variant (encoder-decoder) as a follow-up scene
 
@@ -84,3 +84,4 @@ the transformer architecture.
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — 6-token self-attention scene with Q/K/V projections, score lines, softmax matrix, context aggregation |
+| 2026-04-13 | Fre-ed Team | Added token focus controls, shared legend/scene prompts, and reduced-motion aware camera behavior |

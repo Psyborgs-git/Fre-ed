@@ -76,10 +76,9 @@ autograd. They finish able to write a manual backward pass for a two-layer netwo
 - Two-phase animation (cyan forward, amber backward) described in prose before scene reference
 - Loss sphere (red) described as "loss computed at output" in prose
 - Vanishing gradient section includes mathematical derivation accessible via KaTeX/MathML
-- No keyboard or pointer interactions required
+- A learning-rate control now lets readers amplify or soften the backward signal directly from the scene panel
 
 ## 10. Open Questions / Future Work
-- Add an interactive "learning rate" slider that shows gradient step size visually
 - Animate individual weight value changes (floating numbers that update per step)
 - Implement a "vanishing gradient" mode showing signal decay across many layers
 - Add computation graph view (DAG of operations) alongside the neural network view
@@ -89,3 +88,4 @@ autograd. They finish able to write a manual backward pass for a two-layer netwo
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — dual-phase forward/backward scene with cyan/amber pulse system |
+| 2026-04-13 | Fre-ed Team | Added live learning-rate control, shared legend/prompt overlays, and reduced-motion support |

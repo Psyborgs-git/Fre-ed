@@ -74,13 +74,12 @@ multi-layer networks were needed (XOR problem).
   - Neuron pulsing → described as "neuron activates" in text
   - Decision boundary plane → derived algebraically in segment B
 - KaTeX math is rendered with accessible MathML output
-- No keyboard or pointer interactions in the scene (OrbitControls mouse-only)
-- `prefers-reduced-motion`: pulse animation in `useFrame` scales by `progress` variable;
-  setting progress to 0 disables it effectively. Future: explicit `matchMedia` check.
+- Live weight and bias sliders sit in the scene control panel and are keyboard reachable
+- `prefers-reduced-motion` now disables time-based pulsing while preserving scroll/scrub progress
 
 ## 10. Open Questions / Future Work
 - Extract `<Neuron>`, `<Weight>`, `<InputNode>` to `/src/three/ml/` shared primitives
-- Add live weight sliders below the scene — adjust `w1..w4`, watch boundary tilt in real time
+- Add an editable 2D datapoint and show its classification updating in real time
 - Add animated forward-pass wave: colour propagates input → neuron → output on scroll
 - Implement full Rosenblatt training loop demo with Fuse.js dataset picker
 - Add `<Tensor3D>` view showing the full decision space for a 2-input perceptron
@@ -89,3 +88,4 @@ multi-layer networks were needed (XOR problem).
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — 4-input perceptron scene with scroll-linked activation and decision boundary |
+| 2026-04-13 | Fre-ed Team | Added live weight and bias controls, shared lesson legend/controls, and explicit reduced-motion handling |
