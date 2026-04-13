@@ -1,6 +1,13 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useScrollProgress } from '../lib/ScrollContext.jsx';
 import { getScrollTopForProgress, getScrollableProgress } from '../lib/scrollProgress.js';
+import {
+  trackRouteView,
+  trackSceneInteraction,
+  trackSceneReady,
+  trackScrollDepth,
+} from '../lib/analytics.js';
 import TagPill from './TagPill.jsx';
 
 const LAYOUT_MODES = {
@@ -74,7 +81,7 @@ function getChapterIndex(progress, chapters) {
   return Math.min(Math.floor(progress * chapters.length), chapters.length - 1);
 }
 
-function SceneFallback() {
+function SceneFallback({ copy = 'Loading 3D scene…' }) {
   return (
     <div
       className="w-full h-full flex items-center justify-center"
@@ -86,7 +93,7 @@ function SceneFallback() {
           style={{ borderColor: 'var(--accent-cyan)', borderTopColor: 'transparent' }}
         />
         <p className="text-sm" style={{ color: 'var(--ink-lo)' }}>
-          Loading 3D scene…
+          {copy}
         </p>
       </div>
     </div>
@@ -143,14 +150,125 @@ function SceneChapterOverlay({ progress, chapters }) {
   );
 }
 
-function SceneHint({ sceneFullscreen }) {
-  const hint = sceneFullscreen
-    ? 'Drag to orbit · Use the scrub bar to animate'
-    : 'Drag to orbit · Scroll the lesson below to animate';
+function SceneHint({ sceneFullscreen, interactionHint }) {
+  const hint = interactionHint
+    ?? (sceneFullscreen
+      ? 'Drag to orbit · Use the scrub bar to animate'
+      : 'Drag to orbit · Scroll the lesson below to animate');
 
   return (
     <div className="lesson-scene-hint" aria-hidden="true">
       {hint}
+    </div>
+  );
+}
+
+function SceneLegendOverlay({ prompt, legend }) {
+  if (!prompt && !legend?.length) return null;
+
+  return (
+    <div className="lesson-scene-legend" aria-label="Scene legend">
+      {prompt ? (
+        <div className="lesson-scene-legend__prompt">
+          <span>Try this</span>
+          <p>{prompt}</p>
+        </div>
+      ) : null}
+
+      {legend?.length ? (
+        <ul className="lesson-scene-legend__list">
+          {legend.map(({ label, color, description }) => (
+            <li key={label} className="lesson-scene-legend__item">
+              <span className="lesson-scene-legend__swatch" style={{ background: color }} />
+              <div>
+                <p className="lesson-scene-legend__label">{label}</p>
+                {description ? <p className="lesson-scene-legend__copy">{description}</p> : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function SceneControlPanel({ controls, onInteract }) {
+  if (!controls?.length) return null;
+
+  return (
+    <div className="lesson-scene-controls" aria-label="Scene controls">
+      {controls.map((control) => {
+        const key = control.id ?? control.label;
+
+        if (control.type === 'segmented') {
+          return (
+            <div key={key} className="lesson-scene-control">
+              <div className="lesson-scene-control__header">
+                <span>{control.label}</span>
+                <span>{control.formatValue?.(control.value) ?? control.value}</span>
+              </div>
+              <div className="lesson-scene-control__segmented">
+                {control.options.map((option) => {
+                  const active = option.value === control.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`lesson-scene-segment${active ? ' lesson-scene-segment--active' : ''}`}
+                      onClick={() => onInteract(control, option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+
+        if (control.type === 'select') {
+          return (
+            <label key={key} className="lesson-scene-control">
+              <div className="lesson-scene-control__header">
+                <span>{control.label}</span>
+                <span>{control.formatValue?.(control.value) ?? control.value}</span>
+              </div>
+              <select
+                className="lesson-scene-select"
+                value={control.value}
+                onChange={(event) => onInteract(control, event.target.value)}
+              >
+                {control.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        }
+
+        return (
+          <label key={key} className="lesson-scene-control">
+            <div className="lesson-scene-control__header">
+              <span>{control.label}</span>
+              <span>{control.formatValue?.(control.value) ?? control.value}</span>
+            </div>
+            <input
+              className="lesson-scene-range"
+              type="range"
+              min={control.min}
+              max={control.max}
+              step={control.step ?? 1}
+              value={control.value}
+              onChange={(event) => onInteract(control, Number(event.target.value))}
+            />
+            {control.description ? (
+              <span className="lesson-scene-control__copy">{control.description}</span>
+            ) : null}
+          </label>
+        );
+      })}
     </div>
   );
 }
@@ -215,13 +333,35 @@ function SceneProgressBar({ progress }) {
  * The bottom pane owns scroll progress so the scene stays visible while the
  * writing advances the animation.
  */
-export default function RouteLayout({ Scene, children, meta, chapters }) {
+export default function RouteLayout({
+  Scene,
+  children,
+  meta,
+  chapters = [],
+  sceneProps = {},
+  sceneLegend = [],
+  sceneControls = [],
+  interactionHint,
+  scenePrompt,
+}) {
   const { setProgress, progress } = useScrollProgress();
+  const location = useLocation();
   const contentRef = useRef(null);
+  const scenePanelRef = useRef(null);
   const [layoutMode, setLayoutMode] = useState(LAYOUT_MODES.split);
+  const [shouldMountScene, setShouldMountScene] = useState(false);
+  const seenScrollDepthRef = useRef(new Set());
 
   const isSceneFullscreen = layoutMode === LAYOUT_MODES.scene;
   const isContentFullscreen = layoutMode === LAYOUT_MODES.content;
+
+  const handleSceneControl = useCallback(
+    (control, value) => {
+      control.onChange?.(value);
+      trackSceneInteraction(location.pathname, control.eventName ?? control.id ?? control.label);
+    },
+    [location.pathname]
+  );
 
   const handleContentScroll = useCallback(() => {
     const el = contentRef.current;
@@ -268,6 +408,46 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
   }, [handleContentScroll, meta?.title]);
 
   useEffect(() => {
+    trackRouteView(location.pathname);
+    seenScrollDepthRef.current = new Set();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    [25, 50, 75, 100].forEach((depth) => {
+      if (progress >= depth / 100 && !seenScrollDepthRef.current.has(depth)) {
+        seenScrollDepthRef.current.add(depth);
+        trackScrollDepth(location.pathname, depth);
+      }
+    });
+  }, [location.pathname, progress]);
+
+  useEffect(() => {
+    if (!Scene) return undefined;
+
+    const panel = scenePanelRef.current;
+    if (!panel || shouldMountScene) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldMountScene(true);
+        }
+      },
+      { rootMargin: '240px 0px' }
+    );
+
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [Scene, shouldMountScene]);
+
+  useEffect(() => {
+    if (!Scene || !shouldMountScene) return;
+    trackSceneReady(location.pathname);
+  }, [Scene, location.pathname, shouldMountScene]);
+
+  const sceneChapters = useMemo(() => chapters?.length ? chapters : ['Intro', 'Explore', 'Inspect', 'Recap'], [chapters]);
+
+  useEffect(() => {
     if (layoutMode === LAYOUT_MODES.split) return undefined;
 
     const handleKeyDown = (event) => {
@@ -284,14 +464,20 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
     <div className="lesson-scene-surface">
       <SceneProgressBar progress={progress} />
       <SceneMetaOverlay meta={meta} />
-      <Suspense fallback={<SceneFallback />}>
-        <Scene />
-      </Suspense>
-      <SceneHint sceneFullscreen={isSceneFullscreen} />
-      {isSceneFullscreen ? (
-        <SceneScrubberOverlay progress={progress} chapters={chapters} onScrub={handleSceneScrub} />
+      {shouldMountScene ? (
+        <Suspense fallback={<SceneFallback />}>
+          <Scene {...sceneProps} />
+        </Suspense>
       ) : (
-        <SceneChapterOverlay progress={progress} chapters={chapters} />
+        <SceneFallback copy="Preparing interactive scene…" />
+      )}
+      <SceneHint sceneFullscreen={isSceneFullscreen} interactionHint={interactionHint} />
+      <SceneLegendOverlay prompt={scenePrompt} legend={sceneLegend} />
+      <SceneControlPanel controls={sceneControls} onInteract={handleSceneControl} />
+      {isSceneFullscreen ? (
+        <SceneScrubberOverlay progress={progress} chapters={sceneChapters} onScrub={handleSceneScrub} />
+      ) : (
+        <SceneChapterOverlay progress={progress} chapters={sceneChapters} />
       )}
     </div>
   ) : null;
@@ -320,6 +506,7 @@ export default function RouteLayout({ Scene, children, meta, chapters }) {
         aria-label="Interactive lesson layout"
       >
         <aside
+          ref={scenePanelRef}
           className="lesson-scene-panel"
           aria-hidden={isContentFullscreen ? 'true' : undefined}
           aria-label="Interactive lesson canvas"

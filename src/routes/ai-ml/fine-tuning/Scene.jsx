@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── Loss landscape geometry ───────────────────────────────────────
 // f(x, z) = 2 - 1.8*exp(-((x-1.5)²+(z-1.5)²)/3) + 0.3*sin(x)*cos(z)
@@ -14,6 +15,12 @@ function lossHeight(x, z) {
   const noiseTerm  = 0.3 * Math.sin(x) * Math.cos(z);
   return 2 - valleyTerm + noiseTerm;
 }
+
+const OPTIMIZER_TINTS = {
+  sgd: '#22d3ee',
+  momentum: '#a78bfa',
+  adam: '#f59e0b',
+};
 
 // ── Gradient path waypoints (pre-computed plateau → valley) ──────
 const PATH_POINTS = [
@@ -126,13 +133,9 @@ const ARROW_DEFS_RAW = [
   { from: [ 0.8, lossHeight( 0.8,  0.5) + 0.15,  0.5], dir: [0.25, -0.04, 0.3] },
 ];
 
-function GradientArrows({ progress }) {
-  const t = Math.max(0, (progress - 0.42) / 0.2);
-  if (t < 0.02) return null;
-
-  // Pre-compute all Three.js objects once (they don't change)
+function GradientArrows({ progress, optimizer, learningRate }) {
   const arrows = useMemo(() => {
-    const length = 0.45;
+    const length = 0.35 + learningRate * 0.25;
     return ARROW_DEFS_RAW.map(({ from, dir }) => {
       const origin = new THREE.Vector3(...from);
       const direction = new THREE.Vector3(...dir).normalize();
@@ -148,7 +151,9 @@ function GradientArrows({ progress }) {
       );
       return { headPos: headEnd.toArray(), quaternion, shaftPositions };
     });
-  }, []); // no deps — ARROW_DEFS_RAW is module-level constant
+  }, [learningRate]);
+  const t = Math.max(0, (progress - 0.42) / 0.2);
+  if (t < 0.02) return null;
 
   return (
     <group>
@@ -163,7 +168,7 @@ function GradientArrows({ progress }) {
               />
             </bufferGeometry>
             <lineBasicMaterial
-              color="#f59e0b"
+              color={OPTIMIZER_TINTS[optimizer]}
               transparent
               opacity={t * 0.85}
             />
@@ -172,8 +177,8 @@ function GradientArrows({ progress }) {
           <mesh position={headPos} quaternion={quaternion}>
             <coneGeometry args={[0.055, 0.18, 8]} />
             <meshStandardMaterial
-              color="#f59e0b"
-              emissive="#f59e0b"
+              color={OPTIMIZER_TINTS[optimizer]}
+              emissive={OPTIMIZER_TINTS[optimizer]}
               emissiveIntensity={t * 0.6}
               transparent
               opacity={t * 0.9}
@@ -187,7 +192,7 @@ function GradientArrows({ progress }) {
 
 // ── Optimisation path trail spheres ──────────────────────────────
 
-function OptimPath({ progress }) {
+function OptimPath({ progress, optimizer, learningRate }) {
   const trailT = Math.max(0, (progress - 0.6) / 0.35);
   if (trailT < 0.02) return null;
 
@@ -199,12 +204,9 @@ function OptimPath({ progress }) {
       {PATH_POINTS.slice(0, count).map(([x, y, z], i) => {
         const frac = i / (PATH_POINTS.length - 1);
         // Colour lerp: cyan (start) → amber (end)
-        const r = Math.round(0x22 + frac * (0xf5 - 0x22)).toString(16).padStart(2, '0');
-        const g = Math.round(0xd3 + frac * (0x9e - 0xd3)).toString(16).padStart(2, '0');
-        const b = Math.round(0xee + frac * (0x0b - 0xee)).toString(16).padStart(2, '0');
-        const col = `#${r}${g}${b}`;
+        const col = frac < 0.35 ? '#22d3ee' : OPTIMIZER_TINTS[optimizer];
 
-        const pointOpacity = Math.min(1, (trailT - (i / PATH_POINTS.length) * 0.7) * 3);
+        const pointOpacity = Math.min(1, (trailT - (i / PATH_POINTS.length) * 0.7) * (2 + learningRate));
 
         return (
           <mesh key={i} position={[x, y, z]}>
@@ -225,7 +227,7 @@ function OptimPath({ progress }) {
 
 // ── Camera ────────────────────────────────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -235,9 +237,15 @@ function CameraRig({ progress }) {
     const targetZ = 7 - p * 1.5;
     const targetY = 5 + p * 2.5;
     const targetX = -0.5 + p * 0.5;
-    camera.position.x += (targetX - camera.position.x) * 0.04;
-    camera.position.y += (targetY - camera.position.y) * 0.04;
-    camera.position.z += (targetZ - camera.position.z) * 0.04;
+    if (reducedMotion) {
+      camera.position.x = targetX;
+      camera.position.y = targetY;
+      camera.position.z = targetZ;
+    } else {
+      camera.position.x += (targetX - camera.position.x) * 0.04;
+      camera.position.y += (targetY - camera.position.y) * 0.04;
+      camera.position.z += (targetZ - camera.position.z) * 0.04;
+    }
     camera.lookAt(0, 0.5, 0);
   });
   return null;
@@ -245,7 +253,7 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ optimizer, learningRate, reducedMotion }) {
   const { progress } = useScrollProgress();
 
   return (
@@ -259,10 +267,10 @@ function SceneContent() {
 
       <LossTerrain />
       <PreTrainedSphere progress={progress} />
-      <GradientArrows   progress={progress} />
-      <OptimPath        progress={progress} />
+      <GradientArrows   progress={progress} optimizer={optimizer} learningRate={learningRate} />
+      <OptimPath        progress={progress} optimizer={optimizer} learningRate={learningRate} />
       <FineTunedSphere  progress={progress} />
-      <CameraRig        progress={progress} />
+      <CameraRig        progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -290,7 +298,9 @@ function SceneContent() {
  *   75%  — optimisation path trail animates plateau → valley
  *   100% — fine-tuned sphere lights up at valley; camera birds-eye
  */
-export default function Scene() {
+export default function Scene({ optimizer = 'adam', learningRate = 0.3 }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -298,7 +308,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent optimizer={optimizer} learningRate={learningRate} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

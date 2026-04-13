@@ -1,8 +1,9 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── Network topology: input(3) → hidden1(4) → hidden2(4) → output(2) ──
 const LAYERS = [
@@ -16,16 +17,22 @@ const LAYERS = [
 const LAYER_COLORS = ['#a78bfa', '#22d3ee', '#22d3ee', '#f59e0b'];
 const LAYER_EMISSIVE = ['#a78bfa', '#22d3ee', '#22d3ee', '#f59e0b'];
 
-function layerPositions(layer) {
+const PRESET_SCALE = {
+  compact: { x: 0.82, y: 0.78 },
+  standard: { x: 1, y: 1 },
+  wide: { x: 1.18, y: 1.14 },
+};
+
+function layerPositions(layer, scale) {
   const { count } = layer;
-  const spacing = 0.85;
+  const spacing = 0.85 * scale.y;
   const offset = ((count - 1) * spacing) / 2;
-  return Array.from({ length: count }, (_, i) => [layer.x, i * spacing - offset, 0]);
+  return Array.from({ length: count }, (_, i) => [layer.x * scale.x, i * spacing - offset, 0]);
 }
 
 // ── Per-neuron activation pulse ──────────────────────────────────────
 
-function Neuron({ position, color, emissive, progress, layerIdx, neuronIdx }) {
+function Neuron({ position, color, emissive, progress, layerIdx, neuronIdx, reducedMotion }) {
   const meshRef = useRef();
   const glowRef = useRef();
 
@@ -38,7 +45,7 @@ function Neuron({ position, color, emissive, progress, layerIdx, neuronIdx }) {
     const t = clock.getElapsedTime();
     // Ripple: each neuron in the same layer fires with a tiny phase offset
     const phase = neuronIdx * 0.4;
-    const pulse = 1 + Math.sin(t * 2.8 + phase) * 0.05 * localT;
+    const pulse = reducedMotion ? 1 : 1 + Math.sin(t * 2.8 + phase) * 0.05 * localT;
     meshRef.current.scale.setScalar(pulse);
     meshRef.current.material.emissiveIntensity = 0.15 + localT * 0.65;
     if (glowRef.current) {
@@ -70,7 +77,7 @@ function Neuron({ position, color, emissive, progress, layerIdx, neuronIdx }) {
 
 // ── Connections between adjacent layers ──────────────────────────────
 
-function LayerConnections({ fromLayer, toLayer, fromPosns, toPosns, progress, connIdx }) {
+function LayerConnections({ fromPosns, toPosns, progress, connIdx }) {
   // Connection band appears when the source layer activates
   const activateAt = (connIdx / (LAYERS.length - 2)) * 0.55;
   const t = Math.max(0, Math.min(1, (progress - activateAt) / 0.25));
@@ -197,14 +204,14 @@ function DecisionBoundary({ progress }) {
 
 // ── Layer labels (subtle, positioned below each layer) ────────────────
 
-function LayerLabel({ x, label, progress, showAt }) {
+function LayerLabel({ x, count, progress, showAt }) {
   // Labels fade in sequentially
   const t = Math.max(0, Math.min(1, (progress - showAt) / 0.2));
   if (t < 0.01) return null;
 
   // We can't easily render text in R3F without a text mesh, so use a thin
   // emissive bar as a visual divider instead (labels are in the prose).
-  const height = LAYERS.find((l) => l.x === x)?.count * 0.85 + 0.6 ?? 2;
+  const height = count * 0.85 + 0.6;
 
   return (
     <mesh position={[x, 0, -0.2]}>
@@ -221,7 +228,7 @@ function LayerLabel({ x, label, progress, showAt }) {
 
 // ── Camera gentle drift ───────────────────────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -229,8 +236,13 @@ function CameraRig({ progress }) {
     const p = progressRef.current;
     const targetZ = 7.5 + p * 1.8;
     const targetY = p * 0.5;
-    camera.position.z += (targetZ - camera.position.z) * 0.04;
-    camera.position.y += (targetY - camera.position.y) * 0.04;
+    if (reducedMotion) {
+      camera.position.z = targetZ;
+      camera.position.y = targetY;
+    } else {
+      camera.position.z += (targetZ - camera.position.z) * 0.04;
+      camera.position.y += (targetY - camera.position.y) * 0.04;
+    }
     camera.lookAt(0, 0, 0);
   });
   return null;
@@ -238,11 +250,12 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ preset, reducedMotion }) {
   const { progress } = useScrollProgress();
+  const scale = useMemo(() => PRESET_SCALE[preset] ?? PRESET_SCALE.standard, [preset]);
 
   // Pre-compute positions for all layers
-  const allPositions = LAYERS.map(layerPositions);
+  const allPositions = useMemo(() => LAYERS.map((layer) => layerPositions(layer, scale)), [scale]);
 
   return (
     <>
@@ -265,6 +278,7 @@ function SceneContent() {
             progress={progress}
             layerIdx={li}
             neuronIdx={ni}
+            reducedMotion={reducedMotion}
           />
         )),
       )}
@@ -273,8 +287,6 @@ function SceneContent() {
       {LAYERS.slice(0, -1).map((_, li) => (
         <LayerConnections
           key={`c-${li}`}
-          fromLayer={LAYERS[li]}
-          toLayer={LAYERS[li + 1]}
           fromPosns={allPositions[li]}
           toPosns={allPositions[li + 1]}
           progress={progress}
@@ -286,8 +298,8 @@ function SceneContent() {
       {LAYERS.map((layer, li) => (
         <LayerLabel
           key={`l-${li}`}
-          x={layer.x}
-          label={['Input', 'Hidden 1', 'Hidden 2', 'Output'][li]}
+          x={layer.x * scale.x}
+          count={layer.count}
           progress={progress}
           showAt={li * 0.18}
         />
@@ -304,7 +316,7 @@ function SceneContent() {
       {/* Decision boundary hint */}
       <DecisionBoundary progress={progress} />
 
-      <CameraRig progress={progress} />
+      <CameraRig progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -329,7 +341,9 @@ function SceneContent() {
  *   75 % — Output lights up; decision boundary plane fades in
  *   100% — Forward-pass wave sweeps left→right; full activation
  */
-export default function Scene() {
+export default function Scene({ preset = 'standard' }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -337,7 +351,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent preset={preset} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

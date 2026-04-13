@@ -1,122 +1,19 @@
 import { Link } from 'react-router-dom';
+import { COMING_SOON_AI_ML_LESSONS, LIVE_AI_ML_LESSONS } from './registry.js';
 
 /**
  * AI/ML segment hub — as described in 11-ai-ml-segment.md.
  * Shows available model "worlds" and links to each route.
  */
 const ML_ROUTES = [
-  {
-    path: '/ai-ml/perceptron',
-    title: 'Perceptron',
-    desc: 'A single neuron: inputs, weights, bias, and activation. The atom of every neural network.',
+  ...LIVE_AI_ML_LESSONS.map(({ path, meta }) => ({
+    path,
+    title: meta.title,
+    desc: meta.description,
     status: 'live',
-    tags: ['fundamentals', 'neural-networks'],
-  },
-  {
-    path: '/ai-ml/mlp',
-    title: 'Multi-Layer Perceptron',
-    desc: 'Stack perceptrons to create nonlinear decision boundaries. Layers, activations, and forward pass.',
-    status: 'live',
-    tags: ['neural-networks', 'deep-learning'],
-  },
-  {
-    path: '/ai-ml/backprop',
-    title: 'Backpropagation',
-    desc: 'How gradients flow backward through a network. Chain rule visualised as a reverse colour pulse.',
-    status: 'live',
-    tags: ['training', 'gradients'],
-  },
-  {
-    path: '/ai-ml/cnn-from-scratch',
-    title: 'CNN from Scratch',
-    desc: '3D image volumes, sliding kernels, and stacked feature maps — convolutional intuition.',
-    status: 'live',
-    tags: ['computer-vision', 'convolution'],
-  },
-  {
-    path: '/ai-ml/attention',
-    title: 'Self-Attention',
-    desc: 'Token spheres, Query–Key dot products, and softmax heatmaps. The core of transformers.',
-    status: 'live',
-    tags: ['transformers', 'nlp'],
-  },
-  {
-    path: '/ai-ml/transformer',
-    title: 'Transformer Block',
-    desc: 'Stacked attention + feedforward layers with residual connections — the full block in 3D.',
-    status: 'live',
-    tags: ['transformers', 'architecture'],
-  },
-  {
-    path: '/ai-ml/moe',
-    title: 'Mixture of Experts',
-    desc: 'A gating network routes each token to just 2 of 8 experts. Sparse activation scales models to trillions of parameters.',
-    status: 'live',
-    tags: ['transformers', 'scaling'],
-  },
-  {
-    path: '/ai-ml/rag',
-    title: 'Retrieval-Augmented Generation',
-    desc: 'Query embeddings, cosine similarity, and vector databases — how LLMs retrieve facts before generating answers.',
-    status: 'live',
-    tags: ['rag', 'nlp', 'retrieval'],
-  },
-  {
-    path: '/ai-ml/lora',
-    title: 'LoRA — Low-Rank Adaptation',
-    desc: 'Freeze the base model and learn two tiny adapter matrices. Train < 0.1% of parameters to adapt a 70B model.',
-    status: 'live',
-    tags: ['fine-tuning', 'peft', 'lora'],
-  },
-  {
-    path: '/ai-ml/fine-tuning',
-    title: 'Fine-Tuning',
-    desc: 'Walk the loss landscape from pre-trained plateau to task-specific valley. SFT, RLHF, and DPO explained.',
-    status: 'live',
-    tags: ['fine-tuning', 'rlhf', 'sft'],
-  },
-  {
-    path: '/ai-ml/embeddings',
-    title: 'Embeddings',
-    desc: 'How discrete tokens become continuous vectors. Word2Vec, cosine similarity, king−man+woman=queen, and positional encodings.',
-    status: 'live',
-    tags: ['embeddings', 'nlp', 'word2vec'],
-  },
-  {
-    path: '/ai-ml/normalization',
-    title: 'Normalization',
-    desc: 'BatchNorm, LayerNorm, and RMSNorm — keeping activations well-behaved so deep networks can actually train.',
-    status: 'live',
-    tags: ['normalization', 'batch-norm', 'layer-norm'],
-  },
-  {
-    path: '/ai-ml/optimizers',
-    title: 'Optimizers',
-    desc: 'SGD vs Momentum vs Adam racing through the same loss landscape. Why adaptive learning rates win.',
-    status: 'live',
-    tags: ['optimizers', 'adam', 'training'],
-  },
-  {
-    path: '/ai-ml/regularization',
-    title: 'Dropout & Regularization',
-    desc: 'Randomly silence neurons during training to create an implicit ensemble. Dropout, L2 decay, and early stopping.',
-    status: 'live',
-    tags: ['regularization', 'dropout', 'overfitting'],
-  },
-  {
-    path: '/ai-ml/rnn-lstm',
-    title: 'RNN & LSTM',
-    desc: 'A hidden state that travels through time. How LSTMs use forget, input, and output gates to preserve long-range memory.',
-    status: 'live',
-    tags: ['rnn', 'lstm', 'sequences'],
-  },
-  {
-    path: '/ai-ml/diffusion',
-    title: 'Diffusion Models',
-    desc: 'Add noise until structure vanishes, then learn to reverse the process. DDPM, score matching, and latent diffusion.',
-    status: 'live',
-    tags: ['diffusion', 'generative-ai', 'ddpm'],
-  },
+    tags: meta.tags,
+  })),
+  ...COMING_SOON_AI_ML_LESSONS,
 ];
 
 const STATUS_BADGE = {

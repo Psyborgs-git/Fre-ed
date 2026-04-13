@@ -2,6 +2,7 @@ import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 const N = 6; // number of tokens
@@ -27,7 +28,7 @@ const SOFTMAX = SCORES.map(softmaxRow);
 
 // ── Input token column ────────────────────────────────────────────
 
-function TokenColumn({ progress }) {
+function TokenColumn({ progress, selectedToken }) {
   const t = Math.min(1, progress * 4);
   return (
     <group>
@@ -37,11 +38,11 @@ function TokenColumn({ progress }) {
           <meshStandardMaterial
             color="#a78bfa"
             emissive="#a78bfa"
-            emissiveIntensity={0.2 + t * 0.5}
+            emissiveIntensity={(i === selectedToken ? 0.45 : 0.2) + t * 0.5}
             roughness={0.3}
             metalness={0.5}
             transparent
-            opacity={0.4 + t * 0.6}
+            opacity={(i === selectedToken ? 0.7 : 0.4) + t * (i === selectedToken ? 0.3 : 0.6)}
           />
         </mesh>
       ))}
@@ -97,12 +98,7 @@ function QKVProjections({ progress }) {
 
 // ── Q·K score lines ───────────────────────────────────────────────
 
-function ScoreLines({ progress }) {
-  const scoresT = Math.max(0, Math.min(1, (progress - 0.25) / 0.3));
-  if (scoresT < 0.01) return null;
-
-  const softT = Math.max(0, Math.min(1, (progress - 0.5) / 0.2));
-
+function ScoreLines({ progress, selectedToken }) {
   const lines = useMemo(() => {
     const result = [];
     for (let i = 0; i < N; i++) {
@@ -115,14 +111,19 @@ function ScoreLines({ progress }) {
     }
     return result;
   }, []);
+  const scoresT = Math.max(0, Math.min(1, (progress - 0.25) / 0.3));
+  const softT = Math.max(0, Math.min(1, (progress - 0.5) / 0.2));
+
+  if (scoresT < 0.01) return null;
 
   return (
     <group>
       {lines.map(({ i, j, score, softScore }, idx) => {
         // After softmax: dim all weak connections, brighten top ones
         const weight = softT > 0.3 ? softScore : score;
-        const opacity = scoresT * weight * (softT > 0.3 ? 1.2 : 0.5);
-        const lineWidth = 0.4 + weight * 1.2;
+        const focused = i === selectedToken;
+        const opacity = scoresT * weight * (softT > 0.3 ? 1.2 : 0.5) * (focused ? 1.4 : 0.28);
+        const lineWidth = (focused ? 0.8 : 0.4) + weight * (focused ? 2.2 : 1.2);
         return (
           <Line
             key={idx}
@@ -144,7 +145,7 @@ function ScoreLines({ progress }) {
 
 // ── Attention weight matrix (6×6 grid of small quads) ─────────────
 
-function AttentionMatrix({ progress }) {
+function AttentionMatrix({ progress, selectedToken }) {
   const t = Math.max(0, Math.min(1, (progress - 0.5) / 0.2));
   if (t < 0.01) return null;
 
@@ -163,15 +164,16 @@ function AttentionMatrix({ progress }) {
           const color = `#${r}${g}${b}`;
           const x = (j - (N - 1) / 2) * GAP;
           const y = ((N - 1) / 2 - i) * GAP;
+          const selectedRow = i === selectedToken;
           return (
             <mesh key={`${i}-${j}`} position={[x, y, 0]}>
               <planeGeometry args={[CELL, CELL]} />
               <meshStandardMaterial
                 color={color}
                 emissive={color}
-                emissiveIntensity={t * weight * 0.8}
+                emissiveIntensity={t * weight * (selectedRow ? 1.6 : 0.8)}
                 transparent
-                opacity={t * (0.4 + weight * 0.6)}
+                opacity={t * (selectedRow ? 0.7 : 0.28 + weight * 0.6)}
               />
             </mesh>
           );
@@ -183,13 +185,14 @@ function AttentionMatrix({ progress }) {
 
 // ── Context vector aggregation lines (V-weighted blend) ───────────
 
-function ContextLines({ progress }) {
+function ContextLines({ progress, selectedToken }) {
   const t = Math.max(0, Math.min(1, (progress - 0.7) / 0.2));
   if (t < 0.01) return null;
 
   return (
     <group>
       {TOKEN_Y.map((outY, i) => {
+        if (i !== selectedToken) return null;
         // Each output token blends the top-2 V projections for token i
         const weights = SOFTMAX[i];
         const topTwo = [...weights.map((w, j) => ({ w, j }))]
@@ -213,7 +216,7 @@ function ContextLines({ progress }) {
 
 // ── Output token column ───────────────────────────────────────────
 
-function OutputColumn({ progress }) {
+function OutputColumn({ progress, selectedToken }) {
   const t = Math.max(0, Math.min(1, (progress - 0.7) / 0.2));
   if (t < 0.01) return null;
 
@@ -225,11 +228,11 @@ function OutputColumn({ progress }) {
           <meshStandardMaterial
             color="#22d3ee"
             emissive="#22d3ee"
-            emissiveIntensity={t * 0.8}
+            emissiveIntensity={t * (i === selectedToken ? 1.2 : 0.5)}
             roughness={0.3}
             metalness={0.5}
             transparent
-            opacity={t}
+            opacity={t * (i === selectedToken ? 1 : 0.35)}
           />
         </mesh>
       ))}
@@ -239,7 +242,7 @@ function OutputColumn({ progress }) {
 
 // ── Camera ────────────────────────────────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -247,8 +250,13 @@ function CameraRig({ progress }) {
     const p = progressRef.current;
     const targetZ = 9 + p * 3;
     const targetY = p * 0.8;
-    camera.position.z += (targetZ - camera.position.z) * 0.04;
-    camera.position.y += (targetY - camera.position.y) * 0.04;
+    if (reducedMotion) {
+      camera.position.z = targetZ;
+      camera.position.y = targetY;
+    } else {
+      camera.position.z += (targetZ - camera.position.z) * 0.04;
+      camera.position.y += (targetY - camera.position.y) * 0.04;
+    }
     camera.lookAt(0, 0, 0);
   });
   return null;
@@ -256,7 +264,7 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ selectedToken, reducedMotion }) {
   const { progress } = useScrollProgress();
 
   return (
@@ -269,26 +277,26 @@ function SceneContent() {
       <pointLight position={[3, 0, 3]} intensity={0.8} color="#f59e0b" />
 
       {/* Input tokens (violet) */}
-      <TokenColumn progress={progress} />
+      <TokenColumn progress={progress} selectedToken={selectedToken} />
 
       {/* Q / K / V projection spheres */}
       <QKVProjections progress={progress} />
 
       {/* Q·K score lines */}
-      <ScoreLines progress={progress} />
+      <ScoreLines progress={progress} selectedToken={selectedToken} />
 
       {/* Attention weight matrix at centre */}
       <group position={[0, 0, -0.5]}>
-        <AttentionMatrix progress={progress} />
+        <AttentionMatrix progress={progress} selectedToken={selectedToken} />
       </group>
 
       {/* Context aggregation (V-weighted) */}
-      <ContextLines progress={progress} />
+      <ContextLines progress={progress} selectedToken={selectedToken} />
 
       {/* Output tokens (cyan) */}
-      <OutputColumn progress={progress} />
+      <OutputColumn progress={progress} selectedToken={selectedToken} />
 
-      <CameraRig progress={progress} />
+      <CameraRig progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -317,7 +325,9 @@ function SceneContent() {
  *   70%  — Context aggregation lines show V-weighted blend; output column appears
  *   90%  — Camera pulled back for full-scene view
  */
-export default function Scene() {
+export default function Scene({ selectedToken = 0 }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -325,7 +335,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent selectedToken={selectedToken} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

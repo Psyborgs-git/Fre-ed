@@ -2,6 +2,7 @@ import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 const N_TOKENS = 6;
@@ -9,10 +10,11 @@ const TOKEN_Y = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
 const TOKEN_COLOR_IN = '#a78bfa';   // violet — input
 const TOKEN_COLOR_OUT = '#22d3ee';  // cyan   — output
 const FFN_COLOR = '#f59e0b';        // amber  — FFN sublayer
+const HEAD_COLORS = ['#22d3ee', '#67e8f9', '#a78bfa', '#f59e0b'];
 
 // ── Input token column ────────────────────────────────────────────
 
-function TokenColumn({ x, color, progress, delay = 0 }) {
+function TokenColumn({ x, color, progress, delay = 0, selectedHead }) {
   return (
     <group>
       {TOKEN_Y.map((y, i) => (
@@ -21,7 +23,7 @@ function TokenColumn({ x, color, progress, delay = 0 }) {
           <meshStandardMaterial
             color={color}
             emissive={color}
-            emissiveIntensity={Math.max(0, progress - delay) * 0.6}
+            emissiveIntensity={Math.max(0, progress - delay) * (selectedHead === i % HEAD_COLORS.length ? 0.95 : 0.6)}
             roughness={0.3}
             metalness={0.5}
           />
@@ -33,7 +35,7 @@ function TokenColumn({ x, color, progress, delay = 0 }) {
 
 // ── Attention connections (all-to-all) ────────────────────────────
 
-function AttentionLines({ progress }) {
+function AttentionLines({ progress, selectedHead }) {
   const lines = useMemo(() => {
     const result = [];
     for (let i = 0; i < N_TOKENS; i++) {
@@ -41,7 +43,7 @@ function AttentionLines({ progress }) {
         if (i === j) continue;
         // Strength varies per pair to show varied attention weights
         const strength = 0.3 + ((i * 3 + j * 7) % 10) / 10 * 0.7;
-        result.push({ i, j, strength });
+        result.push({ i, j, strength, head: (i + j) % HEAD_COLORS.length });
       }
     }
     return result;
@@ -52,27 +54,30 @@ function AttentionLines({ progress }) {
 
   return (
     <group>
-      {lines.map(({ i, j, strength }, idx) => (
-        <Line
-          key={idx}
-          points={[
-            [-3, TOKEN_Y[i], 0],
-            [-1, (TOKEN_Y[i] + TOKEN_Y[j]) / 2, 0.5],
-            [-3, TOKEN_Y[j], 0],
-          ]}
-          color={TOKEN_COLOR_OUT}
-          lineWidth={strength * 1.2}
-          transparent
-          opacity={opacity * strength * 0.5}
-        />
-      ))}
+      {lines.map(({ i, j, strength, head }, idx) => {
+        const focused = head === selectedHead;
+        return (
+          <Line
+            key={idx}
+            points={[
+              [-3, TOKEN_Y[i], 0],
+              [-1, (TOKEN_Y[i] + TOKEN_Y[j]) / 2, 0.5],
+              [-3, TOKEN_Y[j], 0],
+            ]}
+            color={HEAD_COLORS[head]}
+            lineWidth={strength * (focused ? 1.9 : 0.9)}
+            transparent
+            opacity={opacity * strength * (focused ? 0.8 : 0.12)}
+          />
+        );
+      })}
     </group>
   );
 }
 
 // ── FFN sublayer boxes ────────────────────────────────────────────
 
-function FFNLayer({ progress }) {
+function FFNLayer({ progress, selectedHead }) {
   const t = Math.max(0, (progress - 0.4) / 0.35);
 
   return (
@@ -83,7 +88,7 @@ function FFNLayer({ progress }) {
           <meshStandardMaterial
             color={FFN_COLOR}
             emissive={FFN_COLOR}
-            emissiveIntensity={t * 0.5}
+            emissiveIntensity={t * (selectedHead === i % HEAD_COLORS.length ? 0.85 : 0.5)}
             roughness={0.4}
             metalness={0.3}
             transparent
@@ -155,7 +160,7 @@ function FeedLines({ progress }) {
 
 // ── Camera ────────────────────────────────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -163,8 +168,13 @@ function CameraRig({ progress }) {
     const p = progressRef.current;
     const targetZ = 8 + p * 2;
     const targetY = p * 1.2;
-    camera.position.z += (targetZ - camera.position.z) * 0.05;
-    camera.position.y += (targetY - camera.position.y) * 0.05;
+    if (reducedMotion) {
+      camera.position.z = targetZ;
+      camera.position.y = targetY;
+    } else {
+      camera.position.z += (targetZ - camera.position.z) * 0.05;
+      camera.position.y += (targetY - camera.position.y) * 0.05;
+    }
     camera.lookAt(0, 0, 0);
   });
   return null;
@@ -172,7 +182,7 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ selectedHead, reducedMotion }) {
   const { progress } = useScrollProgress();
 
   return (
@@ -185,13 +195,19 @@ function SceneContent() {
       <pointLight position={[0, 0, 4]} intensity={0.5} color="#f59e0b" />
 
       {/* Input tokens */}
-      <TokenColumn x={-3} color={TOKEN_COLOR_IN} progress={progress} delay={0} />
+      <TokenColumn
+        x={-3}
+        color={TOKEN_COLOR_IN}
+        progress={progress}
+        delay={0}
+        selectedHead={selectedHead}
+      />
 
       {/* Attention connections */}
-      <AttentionLines progress={progress} />
+      <AttentionLines progress={progress} selectedHead={selectedHead} />
 
       {/* FFN sublayer */}
-      <FFNLayer progress={progress} />
+      <FFNLayer progress={progress} selectedHead={selectedHead} />
 
       {/* Feed lines */}
       <FeedLines progress={progress} />
@@ -200,9 +216,15 @@ function SceneContent() {
       <ResidualLines progress={progress} />
 
       {/* Output tokens */}
-      <TokenColumn x={3} color={TOKEN_COLOR_OUT} progress={progress} delay={0.55} />
+      <TokenColumn
+        x={3}
+        color={TOKEN_COLOR_OUT}
+        progress={progress}
+        delay={0.55}
+        selectedHead={selectedHead}
+      />
 
-      <CameraRig progress={progress} />
+      <CameraRig progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -228,7 +250,9 @@ function SceneContent() {
  *   75%  — output tokens brighten; residual lines materialise
  *   100% — full scene; camera pulled back for whole-block view
  */
-export default function Scene() {
+export default function Scene({ selectedHead = 0 }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -236,7 +260,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent selectedHead={selectedHead} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }
