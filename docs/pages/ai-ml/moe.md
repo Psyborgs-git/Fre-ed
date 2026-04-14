@@ -66,10 +66,9 @@ deploying MoE models.
 - `<Canvas>` has `aria-hidden="true"`
 - The full gating mechanism and expert selection process is explained textually in segment B
 - The sparse vs dense parameter trade-off table in segment B conveys the same information as the visual contrast between lit and dim experts
-- No interactive elements
+- Top-k routing controls now let readers compare sparse expert activation patterns with keyboard-accessible segmented buttons
 
 ## 10. Open Questions / Future Work
-- Add live top-k slider (k=1 vs k=2 vs k=4) to show trade-off interactively
 - Add expert load histogram below the scene showing token distribution
 - Animate the all-to-all communication pattern across devices
 - Extract `<Router>` and `<ExpertGrid>` to `/src/three/ml/` shared primitives
@@ -78,3 +77,4 @@ deploying MoE models.
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — 8 experts, top-2 routing, sparse activation |
+| 2026-04-13 | Fre-ed Team | Added live top-k controls, shared scene overlays, and reduced-motion support for scene motion |

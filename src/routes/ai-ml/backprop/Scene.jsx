@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── 3-layer network topology (same as MLP but gradient-focused) ──────
 // Layers: input(3) → hidden(3) → output(2)
@@ -93,7 +94,7 @@ function Neuron({ position, layerIdx, neuronIdx, progress }) {
 
 // ── Connections — forward (cyan) and backward gradient (amber) ────────
 
-function Connections({ fromIdx, toIdx, fromPosns, toPosns, progress }) {
+function Connections({ fromIdx, fromPosns, toPosns, progress, learningRate }) {
   // Forward connections appear at ~0–45%
   const fwdAppear = (fromIdx / (LAYERS.length - 1)) * 0.4;
   const fwdT = Math.max(0, Math.min(1, (progress - fwdAppear) / 0.2));
@@ -125,9 +126,9 @@ function Connections({ fromIdx, toIdx, fromPosns, toPosns, progress }) {
               <Line
                 points={[to, from]}
                 color={GRAD_COLOR}
-                lineWidth={1.4 + gradT}
+                lineWidth={1.1 + gradT + learningRate}
                 transparent
-                opacity={gradT * 0.55}
+                opacity={gradT * (0.35 + learningRate * 0.4)}
               />
             )}
           </group>
@@ -189,16 +190,16 @@ function GradientPulse({ progress }) {
 
 // ── Loss sphere (output zone) — appears after forward pass ───────────
 
-function LossSphere({ progress }) {
-  const t = Math.max(0, Math.min(1, (progress - 0.4) / 0.2));
-  if (t < 0.01) return null;
-
+function LossSphere({ progress, learningRate, reducedMotion }) {
   const ref = useRef();
   useFrame(({ clock }) => {
     if (!ref.current) return;
+    const t = Math.max(0, Math.min(1, (progress - 0.4) / 0.2));
     const tt = clock.getElapsedTime();
-    ref.current.material.emissiveIntensity = 0.4 + Math.sin(tt * 3) * 0.2 * t;
+    ref.current.material.emissiveIntensity = 0.4 + (reducedMotion ? 0 : Math.sin(tt * 3) * 0.2 * t) + learningRate * 0.15;
   });
+  const t = Math.max(0, Math.min(1, (progress - 0.4) / 0.2));
+  if (t < 0.01) return null;
 
   return (
     <mesh ref={ref} position={[5, 0, 0]}>
@@ -236,7 +237,7 @@ function LossLine({ progress }) {
 
 // ── Camera ────────────────────────────────────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -245,8 +246,13 @@ function CameraRig({ progress }) {
     // Shift camera right during forward pass, back left during gradient pass
     const targetX = p < 0.5 ? p * 1.0 : (1 - p) * 1.0;
     const targetZ = 7.5 + p * 1.5;
-    camera.position.x += (targetX - camera.position.x) * 0.04;
-    camera.position.z += (targetZ - camera.position.z) * 0.04;
+    if (reducedMotion) {
+      camera.position.x = targetX;
+      camera.position.z = targetZ;
+    } else {
+      camera.position.x += (targetX - camera.position.x) * 0.04;
+      camera.position.z += (targetZ - camera.position.z) * 0.04;
+    }
     camera.lookAt(0, 0, 0);
   });
   return null;
@@ -254,7 +260,7 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ learningRate, reducedMotion }) {
   const { progress } = useScrollProgress();
 
   return (
@@ -285,22 +291,22 @@ function SceneContent() {
         <Connections
           key={`c-${li}`}
           fromIdx={li}
-          toIdx={li + 1}
           fromPosns={ALL_POSITIONS[li]}
           toPosns={ALL_POSITIONS[li + 1]}
           progress={progress}
+          learningRate={learningRate}
         />
       ))}
 
       {/* Loss sphere (the target we're differentiating) */}
-      <LossSphere progress={progress} />
+      <LossSphere progress={progress} learningRate={learningRate} reducedMotion={reducedMotion} />
       <LossLine progress={progress} />
 
       {/* Travelling pulses */}
       <ForwardPulse progress={progress} />
       <GradientPulse progress={progress} />
 
-      <CameraRig progress={progress} />
+      <CameraRig progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -328,7 +334,9 @@ function SceneContent() {
  *   75 % — All connections switch from cyan to amber
  *   100% — Network in fully "trained" state; gradient flow complete
  */
-export default function Scene() {
+export default function Scene({ learningRate = 0.3 }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -336,7 +344,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent learningRate={learningRate} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

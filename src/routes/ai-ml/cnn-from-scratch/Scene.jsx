@@ -1,8 +1,9 @@
-import { useRef, useMemo } from 'react';
+import { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── Layout constants ──────────────────────────────────────────────────
 const INPUT_SIZE = 7;   // 7×7 input grid
@@ -18,12 +19,18 @@ const CONV_X  = INPUT_X + (INPUT_SIZE * CELL) / 2 + GAP_X + (FEAT_SIZE * CELL) /
 const POOL_X  = CONV_X + (FEAT_SIZE * CELL) / 2 + GAP_X + ((FEAT_SIZE / POOL_SIZE) * CELL) / 2 + 0.5;
 const FC_X    = POOL_X + 2.0;
 
+const KERNEL_STYLES = {
+  edge: { input: (r, c) => 1 - ((r + c) / ((INPUT_SIZE - 1) * 2)), feature: (r, c) => Math.abs(r - c) / (FEAT_SIZE - 1), color: '#f59e0b' },
+  blur: { input: (r, c) => 0.3 + (Math.sin((r + c) * 0.8) + 1) * 0.25, feature: () => 0.45, color: '#38bdf8' },
+  sharpen: { input: (r, c) => (r === c || r + c === INPUT_SIZE - 1 ? 1 : 0.25), feature: (r, c) => (r === c ? 1 : 0.2), color: '#fb7185' },
+};
+
 // ── Input image grid ─────────────────────────────────────────────────
 
-function InputGrid({ progress }) {
+function InputGrid({ progress, kernelPreset }) {
   // Simulate a simple diagonal-edge image (bright top-left, dark bottom-right)
   const pixelValue = (r, c) => {
-    const v = 1 - ((r + c) / ((INPUT_SIZE - 1) * 2));
+    const v = KERNEL_STYLES[kernelPreset].input(r, c);
     return 0.1 + v * 0.9;
   };
 
@@ -65,7 +72,7 @@ function InputGrid({ progress }) {
 
 // ── Sliding filter (3×3 kernel) ───────────────────────────────────────
 
-function SlidingFilter({ progress }) {
+function SlidingFilter({ progress, kernelPreset }) {
   // Filter slides across the feature map during 20–65% scroll
   const slideT = Math.max(0, Math.min(1, (progress - 0.2) / 0.45));
   if (slideT < 0.01) return null;
@@ -94,8 +101,8 @@ function SlidingFilter({ progress }) {
             <mesh key={`${fr}-${fc}`} position={[x, y, 0]}>
               <planeGeometry args={[CELL * 0.9, CELL * 0.9]} />
               <meshStandardMaterial
-                color="#f59e0b"
-                emissive="#f59e0b"
+                 color={KERNEL_STYLES[kernelPreset].color}
+                 emissive={KERNEL_STYLES[kernelPreset].color}
                 emissiveIntensity={0.8}
                 transparent
                 opacity={0.35}
@@ -107,7 +114,7 @@ function SlidingFilter({ progress }) {
       {/* Filter border */}
       <mesh position={[0, 0, -0.01]}>
         <planeGeometry args={[FILTER_SIZE * CELL + 0.04, FILTER_SIZE * CELL + 0.04]} />
-        <meshStandardMaterial color="#f59e0b" transparent opacity={0.6} />
+        <meshStandardMaterial color={KERNEL_STYLES[kernelPreset].color} transparent opacity={0.6} />
       </mesh>
     </group>
   );
@@ -115,7 +122,7 @@ function SlidingFilter({ progress }) {
 
 // ── Feature map ───────────────────────────────────────────────────────
 
-function FeatureMap({ progress }) {
+function FeatureMap({ progress, kernelPreset }) {
   // Feature map appears during 25–70% scroll
   const slideT = Math.max(0, Math.min(1, (progress - 0.2) / 0.45));
   const totalPositions = FEAT_SIZE * FEAT_SIZE;
@@ -123,7 +130,7 @@ function FeatureMap({ progress }) {
 
   // Edge-detection kernel response (simple approximation)
   const featureValue = (r, c) => {
-    const v = Math.abs(r - c) / (FEAT_SIZE - 1);
+    const v = KERNEL_STYLES[kernelPreset].feature(r, c);
     return v;
   };
 
@@ -275,7 +282,7 @@ function StageConnectors({ progress }) {
 
 // ── Camera ────────────────────────────────────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -284,8 +291,13 @@ function CameraRig({ progress }) {
     const p = progressRef.current;
     const targetX = p * 2.5;
     const targetZ = 8 + p * 1.5;
-    camera.position.x += (targetX - camera.position.x) * 0.04;
-    camera.position.z += (targetZ - camera.position.z) * 0.04;
+    if (reducedMotion) {
+      camera.position.x = targetX;
+      camera.position.z = targetZ;
+    } else {
+      camera.position.x += (targetX - camera.position.x) * 0.04;
+      camera.position.z += (targetZ - camera.position.z) * 0.04;
+    }
     camera.lookAt(targetX * 0.4, 0, 0);
   });
   return null;
@@ -293,7 +305,7 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ kernelPreset, reducedMotion }) {
   const { progress } = useScrollProgress();
 
   return (
@@ -305,14 +317,14 @@ function SceneContent() {
       <pointLight position={[-4, -3, -3]} intensity={1.2} color="#a78bfa" />
       <pointLight position={[6, 2, 3]} intensity={1.0} color="#f59e0b" />
 
-      <InputGrid progress={progress} />
-      <SlidingFilter progress={progress} />
-      <FeatureMap progress={progress} />
+      <InputGrid progress={progress} kernelPreset={kernelPreset} />
+      <SlidingFilter progress={progress} kernelPreset={kernelPreset} />
+      <FeatureMap progress={progress} kernelPreset={kernelPreset} />
       <StageConnectors progress={progress} />
       <PooledMap progress={progress} />
       <FCLayer progress={progress} />
 
-      <CameraRig progress={progress} />
+      <CameraRig progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -338,7 +350,9 @@ function SceneContent() {
  *   82 % — FC layer appears; top prediction highlighted amber
  *   100% — Full pipeline visible; camera panned right to show all stages
  */
-export default function Scene() {
+export default function Scene({ kernelPreset = 'edge' }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -346,7 +360,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent kernelPreset={kernelPreset} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

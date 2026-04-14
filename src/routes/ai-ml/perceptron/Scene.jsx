@@ -1,19 +1,19 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── Fixed weight values for the 4 inputs ─────────────────────────
 // Positive weights → cyan lines (same direction as output)
 // Negative weights → amber lines (opposing)
-const WEIGHTS = [-0.8, 0.6, -0.3, 0.9];
 const INPUT_Y = [-1.2, -0.4, 0.4, 1.2];
 const INPUT_X = -2.6;
 
 // ── Central neuron ────────────────────────────────────────────────
 
-function Neuron({ progress }) {
+function Neuron({ progress, reducedMotion }) {
   const meshRef = useRef();
   const glowRef = useRef();
   const progressRef = useRef(progress);
@@ -24,7 +24,7 @@ function Neuron({ progress }) {
     const t = clock.getElapsedTime();
     const p = progressRef.current;
     // Pulse intensity scales with scroll progress
-    const pulse = 1 + Math.sin(t * 2.5) * 0.06 * p;
+    const pulse = reducedMotion ? 1 : 1 + Math.sin(t * 2.5) * 0.06 * p;
     meshRef.current.scale.setScalar(pulse);
 
     // Emissive intensity driven by progress (neuron "activates")
@@ -65,10 +65,10 @@ function Neuron({ progress }) {
 
 // ── Input nodes + weight lines ────────────────────────────────────
 
-function InputLayer({ progress }) {
+function InputLayer({ progress, weights }) {
   return (
     <group>
-      {WEIGHTS.map((w, i) => {
+      {weights.map((w, i) => {
         const y = INPUT_Y[i];
         const isPositive = w >= 0;
         const lineColor = isPositive ? '#22d3ee' : '#f59e0b';
@@ -118,7 +118,7 @@ function InputLayer({ progress }) {
 
 // ── Output node + connection ──────────────────────────────────────
 
-function OutputLayer({ progress }) {
+function OutputLayer({ progress, confidence }) {
   const meshRef = useRef();
   const progressRef = useRef(progress);
   progressRef.current = progress;
@@ -139,14 +139,14 @@ function OutputLayer({ progress }) {
         color="#f59e0b"
         lineWidth={2.5}
         transparent
-        opacity={0.5 + progress * 0.4}
+        opacity={0.3 + confidence * 0.35 + progress * 0.25}
       />
       <mesh ref={meshRef} position={[2.6, 0, 0]}>
         <sphereGeometry args={[0.22, 20, 20]} />
         <meshStandardMaterial
           color="#f59e0b"
           emissive="#f59e0b"
-          emissiveIntensity={0.2}
+          emissiveIntensity={0.2 + confidence * 0.5}
           roughness={0.3}
           metalness={0.5}
         />
@@ -158,16 +158,17 @@ function OutputLayer({ progress }) {
 // ── Decision boundary plane ───────────────────────────────────────
 // Tilts as scroll progresses, representing the changing hyperplane
 
-function DecisionBoundary({ progress }) {
+function DecisionBoundary({ progress, weights, bias }) {
   const meshRef = useRef();
   const progressRef = useRef(progress);
   progressRef.current = progress;
+  const targetRotation = useMemo(() => (weights[0] - weights[1] + bias * 0.6) * 0.22, [bias, weights]);
 
   useFrame(() => {
     if (!meshRef.current) return;
     const p = progressRef.current;
     // Plane tilts and opacity grows with progress
-    meshRef.current.rotation.z = p * Math.PI * 0.15;
+    meshRef.current.rotation.z = targetRotation * p;
     meshRef.current.material.opacity = 0.05 + p * 0.1;
   });
 
@@ -187,7 +188,7 @@ function DecisionBoundary({ progress }) {
 
 // ── Scroll choreography: camera drift ────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -196,8 +197,13 @@ function CameraRig({ progress }) {
     // Gradually pull back and tilt as user scrolls
     const targetZ = 6 + p * 1.5;
     const targetY = p * 0.8;
-    camera.position.z += (targetZ - camera.position.z) * 0.05;
-    camera.position.y += (targetY - camera.position.y) * 0.05;
+    if (reducedMotion) {
+      camera.position.z = targetZ;
+      camera.position.y = targetY;
+    } else {
+      camera.position.z += (targetZ - camera.position.z) * 0.05;
+      camera.position.y += (targetY - camera.position.y) * 0.05;
+    }
     camera.lookAt(0, 0, 0);
   });
   return null;
@@ -205,8 +211,12 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ weights, bias, reducedMotion }) {
   const { progress } = useScrollProgress();
+  const confidence = useMemo(() => {
+    const score = weights.reduce((sum, weight) => sum + weight, bias);
+    return 1 / (1 + Math.exp(-score));
+  }, [bias, weights]);
 
   return (
     <>
@@ -218,11 +228,11 @@ function SceneContent() {
       <pointLight position={[-5, -3, -3]} intensity={1} color="#a78bfa" />
       <pointLight position={[3, -2, 2]} intensity={0.5} color="#f59e0b" />
 
-      <InputLayer progress={progress} />
-      <Neuron progress={progress} />
-      <OutputLayer progress={progress} />
-      <DecisionBoundary progress={progress} />
-      <CameraRig progress={progress} />
+      <InputLayer progress={progress} weights={weights} />
+      <Neuron progress={progress} reducedMotion={reducedMotion} />
+      <OutputLayer progress={progress} confidence={confidence} />
+      <DecisionBoundary progress={progress} weights={weights} bias={bias} />
+      <CameraRig progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -249,7 +259,9 @@ function SceneContent() {
  *
  * Prefers-reduced-motion: OrbitControls still works; frame animations are passive.
  */
-export default function Scene() {
+export default function Scene({ weights = [-0.8, 0.6, -0.3, 0.9], bias = 0.2 }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -257,7 +269,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent weights={weights} bias={bias} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

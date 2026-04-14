@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── Layout constants ──────────────────────────────────────────────
 // W matrix: 8×8 grid representing a large frozen weight matrix
@@ -10,14 +11,10 @@ const W_COLS = 8;
 const W_CELL = 0.22;   // cell size
 const W_GAP  = 0.26;   // spacing
 
-// A matrix: 8×2 (tall thin — d×r where r=2)
 const A_ROWS = 8;
-const A_COLS = 2;
 const A_CELL = 0.22;
 const A_GAP  = 0.28;
 
-// B matrix: 2×8 (short wide — r×d where r=2)
-const B_ROWS = 2;
 const B_COLS = 8;
 const B_CELL = 0.22;
 const B_GAP  = 0.28;
@@ -68,19 +65,19 @@ function WMatrix({ progress }) {
 
 // ── A adapter matrix (d×r = 8×2, cyan) ───────────────────────────
 
-function AMatrix({ progress }) {
+function AMatrix({ progress, rank }) {
   const t = Math.max(0, (progress - 0.2) / 0.25);
   if (t < 0.02) return null;
 
-  const offsetX = -3.2;
+  const offsetX = -3.1 - Math.max(0, rank - 2) * 0.18;
   const offsetY = 0;
 
   return (
     <group>
-      {Array.from({ length: A_ROWS * A_COLS }, (_, idx) => {
-        const row = Math.floor(idx / A_COLS);
-        const col = idx % A_COLS;
-        const pos = gridPos(row, col, A_ROWS, A_COLS, A_GAP, offsetX, offsetY);
+      {Array.from({ length: A_ROWS * rank }, (_, idx) => {
+        const row = Math.floor(idx / rank);
+        const col = idx % rank;
+        const pos = gridPos(row, col, A_ROWS, rank, A_GAP, offsetX, offsetY);
 
         return (
           <mesh key={idx} position={pos}>
@@ -103,19 +100,19 @@ function AMatrix({ progress }) {
 
 // ── B adapter matrix (r×d = 2×8, violet) ─────────────────────────
 
-function BMatrix({ progress }) {
+function BMatrix({ progress, rank }) {
   const t = Math.max(0, (progress - 0.2) / 0.25);
   if (t < 0.02) return null;
 
-  const offsetX = 3.2;
+  const offsetX = 3.1 + Math.max(0, rank - 2) * 0.18;
   const offsetY = 0;
 
   return (
     <group>
-      {Array.from({ length: B_ROWS * B_COLS }, (_, idx) => {
+      {Array.from({ length: rank * B_COLS }, (_, idx) => {
         const row = Math.floor(idx / B_COLS);
         const col = idx % B_COLS;
-        const pos = gridPos(row, col, B_ROWS, B_COLS, B_GAP, offsetX, offsetY);
+        const pos = gridPos(row, col, rank, B_COLS, B_GAP, offsetX, offsetY);
 
         return (
           <mesh key={idx} position={pos}>
@@ -138,19 +135,20 @@ function BMatrix({ progress }) {
 
 // ── Multiply lines: A cols → B rows (show BA composition) ─────────
 
-function MultiplyLines({ progress }) {
+function MultiplyLines({ progress, rank }) {
   const t = Math.max(0, (progress - 0.42) / 0.25);
   if (t < 0.02) return null;
+
+  const normalizedRankSpan = Math.max(rank - 1, 1); // keep the interpolation stable when rank is very small
 
   // Two rank nodes positioned at the bottleneck midpoint (x = 0)
   // Lines go from each A's rightmost column position to each B's leftmost column position
   const rankLines = [];
-  for (let r = 0; r < 2; r++) {
-    // A matrix rightmost column (A_COLS - 1 = 1), centre row of this rank index
-    const aRow = Math.floor(A_ROWS / 2) - 1 + r; // rows 3 and 4
-    const aPos = gridPos(aRow, A_COLS - 1, A_ROWS, A_COLS, A_GAP, -3.2, 0);
+  for (let r = 0; r < rank; r++) {
+    const aRow = Math.min(A_ROWS - 1, Math.floor((r / normalizedRankSpan) * (A_ROWS - 1)));
+    const aPos = gridPos(aRow, rank - 1, A_ROWS, rank, A_GAP, -3.1 - Math.max(0, rank - 2) * 0.18, 0);
     // B matrix leftmost column (0), each rank row
-    const bPos = gridPos(r, 0, B_ROWS, B_COLS, B_GAP, 3.2, 0);
+    const bPos = gridPos(r, 0, rank, B_COLS, B_GAP, 3.1 + Math.max(0, rank - 2) * 0.18, 0);
     // Bottleneck midpoint
     const midY = (aPos[1] + bPos[1]) / 2;
     rankLines.push({ aPos, bPos, midY, key: r });
@@ -197,7 +195,7 @@ function MultiplyLines({ progress }) {
 
 // ── Camera ────────────────────────────────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -205,8 +203,13 @@ function CameraRig({ progress }) {
     const p = progressRef.current;
     const targetZ = 7 + p * 2.5;
     const targetY = p * 0.5;
-    camera.position.z += (targetZ - camera.position.z) * 0.04;
-    camera.position.y += (targetY - camera.position.y) * 0.04;
+    if (reducedMotion) {
+      camera.position.z = targetZ;
+      camera.position.y = targetY;
+    } else {
+      camera.position.z += (targetZ - camera.position.z) * 0.04;
+      camera.position.y += (targetY - camera.position.y) * 0.04;
+    }
     camera.lookAt(0, 0, 0);
   });
   return null;
@@ -214,7 +217,7 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ rank, reducedMotion }) {
   const { progress } = useScrollProgress();
 
   return (
@@ -227,10 +230,10 @@ function SceneContent() {
       <pointLight position={[4, 0, 2]} intensity={0.6} color="#f59e0b" />
 
       <WMatrix progress={progress} />
-      <AMatrix progress={progress} />
-      <BMatrix progress={progress} />
-      <MultiplyLines progress={progress} />
-      <CameraRig progress={progress} />
+      <AMatrix progress={progress} rank={rank} />
+      <BMatrix progress={progress} rank={rank} />
+      <MultiplyLines progress={progress} rank={rank} />
+      <CameraRig progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -260,7 +263,9 @@ function SceneContent() {
  *   75%  — delta ΔW overlay highlights centre of W (amber)
  *   100% — camera pulled back to show full size contrast
  */
-export default function Scene() {
+export default function Scene({ rank = 2 }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -268,7 +273,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent rank={rank} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

@@ -80,10 +80,11 @@ MLP in NumPy and ready to understand backpropagation.
 - KaTeX renders with MathML for screen readers
 - OrbitControls: mouse/touch only; no keyboard requirement
 - Reduced-motion: `progress`-gated animations; static at `progress=0`
+- Width presets now let readers compare compact, standard, and wide layouts from the shared scene panel
 
 ## 10. Open Questions / Future Work
 - Extract neuron + connection primitives to `/src/three/ml/` shared lib
-- Add interactive neuron count sliders (depth × width configurator)
+- Extend the width presets into per-layer neuron count controls
 - Animate a live XOR training loop — show weights updating per epoch
 - Implement instanced rendering for large networks (>100 neurons)
 - Add per-neuron activation value labels (shown as colour-mapped text)
@@ -92,3 +93,4 @@ MLP in NumPy and ready to understand backpropagation.
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — 4-layer MLP with scroll-linked activation and forward-pass pulse |
+| 2026-04-13 | Fre-ed Team | Added width presets, shared legend/prompt overlays, and reduced-motion camera support |

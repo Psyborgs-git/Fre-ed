@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
 
 // ── Document corpus — 16 flat rectangles scattered in 3D ─────────
 const N_DOCS = 16;
@@ -14,12 +15,15 @@ const DOC_POSITIONS = Array.from({ length: N_DOCS }, (_, i) => {
   return [Math.cos(angle) * r, ySpread, Math.sin(angle) * r * 0.5 - 0.5];
 });
 
-// Indices of the "top-k retrieved" documents
-const RETRIEVED = new Set([2, 7, 11]);
+const QUERY_PRESETS = {
+  transformers: [2, 7, 11],
+  vectors: [1, 4, 10],
+  retrieval: [0, 6, 14],
+};
 
 // ── Document rectangles ───────────────────────────────────────────
 
-function DocCorpus({ progress }) {
+function DocCorpus({ progress, retrievedDocs }) {
   const raysT = Math.max(0, (progress - 0.15) / 0.3);
   const selectT = Math.max(0, (progress - 0.4) / 0.3);
   const driftT = Math.max(0, (progress - 0.65) / 0.3);
@@ -27,14 +31,14 @@ function DocCorpus({ progress }) {
   return (
     <group>
       {DOC_POSITIONS.map((pos, i) => {
-        const isRetrieved = RETRIEVED.has(i);
+        const isRetrieved = retrievedDocs.has(i);
         const color = isRetrieved ? '#f59e0b' : '#26262f';
         const emissive = isRetrieved ? '#f59e0b' : '#000000';
         const emissiveInt = isRetrieved ? selectT * 0.6 : 0;
         const opacity = isRetrieved ? 0.3 + selectT * 0.7 : 0.4 + raysT * 0.1;
 
         // Retrieved docs drift to a column on the left at high scroll
-        const retrievedIndex = [...RETRIEVED].indexOf(i);
+        const retrievedIndex = [...retrievedDocs].indexOf(i);
         const driftX = isRetrieved ? pos[0] + (-4.5 - pos[0]) * driftT : pos[0];
         const driftY = isRetrieved ? pos[1] + ((retrievedIndex - 1) * 1.2 - pos[1]) * driftT : pos[1];
         const driftZ = isRetrieved ? pos[2] * (1 - driftT) : pos[2];
@@ -108,7 +112,7 @@ function QuerySphere({ progress }) {
 
 // ── Similarity rays (query → each doc) ───────────────────────────
 
-function SimilarityRays({ progress }) {
+function SimilarityRays({ progress, retrievedDocs }) {
   const opacity = Math.max(0, (progress - 0.1) / 0.3);
   if (opacity < 0.01) return null;
 
@@ -117,8 +121,8 @@ function SimilarityRays({ progress }) {
   return (
     <group>
       {DOC_POSITIONS.map((pos, i) => {
-        const isRetrieved = RETRIEVED.has(i);
-        const retrievedIndex = [...RETRIEVED].indexOf(i);
+        const isRetrieved = retrievedDocs.has(i);
+        const retrievedIndex = [...retrievedDocs].indexOf(i);
         const driftX = isRetrieved ? pos[0] + (-4.5 - pos[0]) * driftT : pos[0];
         const driftY = isRetrieved ? pos[1] + ((retrievedIndex - 1) * 1.2 - pos[1]) * driftT : pos[1];
         const driftZ = isRetrieved ? pos[2] * (1 - driftT) : pos[2];
@@ -192,7 +196,7 @@ function GenerationBox({ progress }) {
 
 // ── Camera ────────────────────────────────────────────────────────
 
-function CameraRig({ progress }) {
+function CameraRig({ progress, reducedMotion }) {
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -200,8 +204,13 @@ function CameraRig({ progress }) {
     const p = progressRef.current;
     const targetZ = 7 + p * 2.5;
     const targetY = p * 0.8;
-    camera.position.z += (targetZ - camera.position.z) * 0.04;
-    camera.position.y += (targetY - camera.position.y) * 0.04;
+    if (reducedMotion) {
+      camera.position.z = targetZ;
+      camera.position.y = targetY;
+    } else {
+      camera.position.z += (targetZ - camera.position.z) * 0.04;
+      camera.position.y += (targetY - camera.position.y) * 0.04;
+    }
     camera.lookAt(0, 0, 0);
   });
   return null;
@@ -209,8 +218,9 @@ function CameraRig({ progress }) {
 
 // ── Scene root ────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({ queryPreset, reducedMotion }) {
   const { progress } = useScrollProgress();
+  const retrievedDocs = new Set(QUERY_PRESETS[queryPreset] ?? QUERY_PRESETS.transformers);
 
   return (
     <>
@@ -221,11 +231,11 @@ function SceneContent() {
       <pointLight position={[-4, -2, -2]} intensity={1} color="#a78bfa" />
       <pointLight position={[4, 0, 2]} intensity={0.8} color="#f59e0b" />
 
-      <DocCorpus progress={progress} />
+      <DocCorpus progress={progress} retrievedDocs={retrievedDocs} />
       <QuerySphere progress={progress} />
-      <SimilarityRays progress={progress} />
+      <SimilarityRays progress={progress} retrievedDocs={retrievedDocs} />
       <GenerationBox progress={progress} />
-      <CameraRig progress={progress} />
+      <CameraRig progress={progress} reducedMotion={reducedMotion} />
 
       <OrbitControls
         enableZoom={false}
@@ -253,7 +263,9 @@ function SceneContent() {
  *   75%  — retrieved docs drift left; LLM box appears
  *   100% — generation tokens stream out; camera pulled back
  */
-export default function Scene() {
+export default function Scene({ queryPreset = 'transformers' }) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Canvas
       aria-hidden="true"
@@ -261,7 +273,7 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent />
+      <SceneContent queryPreset={queryPreset} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

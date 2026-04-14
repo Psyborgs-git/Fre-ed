@@ -69,16 +69,16 @@ compositional reasoning.
 - Full conceptual walkthrough in segment B prose including Q/K/V equations, code examples
 - KaTeX renders accessible MathML
 - Attention line weights convey attention strength — same information available in the PyTorch code block in segment B
-- No pointer or keyboard interactions beyond OrbitControls (mouse/touch only)
+- Head selector controls now isolate one attention head at a time with keyboard-accessible segmented buttons
 
 ## 10. Open Questions / Future Work
 - Add `<Text>` labels from Drei for Q, K, V above each attention head
 - Animate causal mask (GPT-style): upper-triangle attention lines dim/disappear
 - Show multiple stacked blocks (animate camera rising through layers)
-- Add interactive head selector: click a head to highlight its specific attention pattern
 - Extract `<TokenSphere>` to `/src/three/ml/` shared primitives
 
 ## 11. Changelog
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — 6-token all-to-all attention, FFN, residual connections |
+| 2026-04-13 | Fre-ed Team | Added head-isolation controls, shared scene overlays, and reduced-motion aware camera behavior |

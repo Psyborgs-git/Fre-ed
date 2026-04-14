@@ -4,6 +4,8 @@ import { OrbitControls, Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScrollProgress } from '../../../lib/ScrollContext.jsx';
 import { useTheme } from '../../../lib/ThemeContext.jsx';
+import { useReducedMotion } from '../../../three/hooks/useReducedMotion.js';
+import Arrow3D from '../../../three/ml/Arrow3D.jsx';
 
 const SCENE_PALETTES = {
   dark: {
@@ -48,71 +50,22 @@ const SCENE_PALETTES = {
   },
 };
 
-// ── Helper: Arrow (vector visualisation) ─────────────────────────
+function transformVector(vector, matrixPreset) {
+  const [x, y, z] = vector;
 
-function Arrow({ from = [0, 0, 0], to, color, lineWidth = 3 }) {
-  const dir = useMemo(() => {
-    const d = new THREE.Vector3(...to).sub(new THREE.Vector3(...from));
-    return d;
-  }, [from, to]);
+  if (matrixPreset === 'shear') return [x + 0.6 * y, y, z];
+  if (matrixPreset === 'rotate') return [x * 0.4 - y * 0.9, x * 0.9 + y * 0.4, z];
 
-  const length = dir.length();
-  const normalizedDir = useMemo(() => {
-    if (length === 0) {
-      return new THREE.Vector3(0, 1, 0);
-    }
-
-    return dir.clone().normalize();
-  }, [dir, length]);
-  const coneHeight = Math.min(0.25, length * 0.25);
-  const conePos = useMemo(() => {
-    const tip = new THREE.Vector3(...to);
-    return tip.sub(normalizedDir.clone().multiplyScalar(coneHeight / 2)).toArray();
-  }, [to, normalizedDir, coneHeight]);
-
-  const coneQuat = useMemo(() => {
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normalizedDir);
-    return q;
-  }, [normalizedDir]);
-
-  return (
-    <group>
-      <Line points={[from, to]} color={color} lineWidth={lineWidth} />
-      <mesh position={conePos} quaternion={coneQuat}>
-        <coneGeometry args={[0.07, coneHeight, 12]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.6}
-          roughness={0.3}
-          metalness={0.1}
-        />
-      </mesh>
-      <mesh position={to}>
-        <sphereGeometry args={[0.05, 16, 16]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.9}
-          roughness={0.15}
-          metalness={0.08}
-        />
-      </mesh>
-    </group>
-  );
+  return vector;
 }
 
 // ── Basis vectors and a custom vector ────────────────────────────
 
-function VectorSpace({ progress, palette, shouldAnimate }) {
+function VectorSpace({ progress, palette, shouldAnimate, vector, matrixPreset }) {
   const groupRef = useRef();
 
-  // Custom vector that appears as scroll progresses
-  const customVec = useMemo(
-    () => [1.5 * progress, 1.2 * progress, 0.8 * progress],
-    [progress]
-  );
+  const customVec = useMemo(() => vector.map((value) => value * progress), [progress, vector]);
+  const transformedVec = useMemo(() => transformVector(customVec, matrixPreset), [customVec, matrixPreset]);
 
   useFrame(() => {
     if (shouldAnimate && groupRef.current) {
@@ -124,9 +77,9 @@ function VectorSpace({ progress, palette, shouldAnimate }) {
   return (
     <group ref={groupRef}>
       {/* Basis vectors: î (cyan), ĵ (violet), k̂ (white) */}
-      <Arrow to={[2, 0, 0]} color={palette.axisX} />
-      <Arrow to={[0, 2, 0]} color={palette.axisY} />
-      <Arrow to={[0, 0, 2]} color={palette.axisZ} />
+      <Arrow3D to={[2, 0, 0]} color={palette.axisX} />
+      <Arrow3D to={[0, 2, 0]} color={palette.axisY} />
+      <Arrow3D to={[0, 0, 2]} color={palette.axisZ} />
 
       {/* Origin sphere */}
       <mesh>
@@ -143,11 +96,7 @@ function VectorSpace({ progress, palette, shouldAnimate }) {
       {/* Custom vector — fades in on scroll */}
       {progress > 0.05 && (
         <group>
-          <Arrow
-            to={customVec}
-            color={palette.vector}
-            lineWidth={4}
-          />
+          <Arrow3D to={customVec} color={palette.vector} lineWidth={4} />
           {/* Dashed projections onto axes */}
           <Line
             points={[customVec, [customVec[0], 0, 0]]}
@@ -169,6 +118,20 @@ function VectorSpace({ progress, palette, shouldAnimate }) {
             transparent
             opacity={0.4}
           />
+          {progress > 0.55 ? (
+            <group>
+              <Arrow3D to={transformedVec} color={palette.planeGlow} lineWidth={3} />
+              <Line
+                points={[customVec, transformedVec]}
+                color={palette.axisZ}
+                dashed
+                dashSize={0.08}
+                gapSize={0.05}
+                transparent
+                opacity={0.35}
+              />
+            </group>
+          ) : null}
         </group>
       )}
     </group>
@@ -177,12 +140,15 @@ function VectorSpace({ progress, palette, shouldAnimate }) {
 
 // ── Transformation demo (appears at high scroll %) ────────────────
 
-function TransformPlane({ progress, palette }) {
+function TransformPlane({ progress, palette, matrixPreset }) {
   if (progress < 0.6) return null;
   const t = (progress - 0.6) / 0.4; // 0→1 from 60% scroll
+  const rotationZ = matrixPreset === 'rotate' ? t * Math.PI * 0.45 : t * Math.PI * 0.12;
+  const scaleX = matrixPreset === 'shear' ? 1.3 : 1;
+  const scaleY = matrixPreset === 'identity' ? 1 : 1.1;
 
   return (
-    <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, t * Math.PI * 0.25]}>
+    <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, rotationZ]} scale={[scaleX, scaleY, 1]}>
       <planeGeometry args={[3, 3, 6, 6]} />
       <meshStandardMaterial
         color={palette.plane}
@@ -199,7 +165,7 @@ function TransformPlane({ progress, palette }) {
 
 // ── Scene root ────────────────────────────────────────────────────
 
-function SceneContent({ palette, shouldAnimate }) {
+function SceneContent({ palette, shouldAnimate, vector, matrixPreset }) {
   const { progress } = useScrollProgress();
 
   return (
@@ -231,8 +197,14 @@ function SceneContent({ palette, shouldAnimate }) {
         position={[0, -0.01, 0]}
       />
 
-      <VectorSpace progress={progress} palette={palette} shouldAnimate={shouldAnimate} />
-      <TransformPlane progress={progress} palette={palette} />
+      <VectorSpace
+        progress={progress}
+        palette={palette}
+        shouldAnimate={shouldAnimate}
+        vector={vector}
+        matrixPreset={matrixPreset}
+      />
+      <TransformPlane progress={progress} palette={palette} matrixPreset={matrixPreset} />
 
       <OrbitControls
         enableZoom={false}
@@ -257,14 +229,11 @@ function SceneContent({ palette, shouldAnimate }) {
  * Prefers-reduced-motion: Canvas is still mounted (no layout shift) but
  * frame-level animations read from a shared motion preference check.
  */
-export default function Scene() {
+export default function Scene({ vector = [1.5, 1.2, 0.8], matrixPreset = 'identity' }) {
   const { theme } = useTheme();
   const palette = SCENE_PALETTES[theme] ?? SCENE_PALETTES.dark;
-  const shouldAnimate = useMemo(() => {
-    if (typeof window === 'undefined') return true;
-
-    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }, []);
+  const reducedMotion = useReducedMotion();
+  const shouldAnimate = !reducedMotion;
 
   return (
     <Canvas
@@ -273,7 +242,12 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       dpr={[1, 2]}
     >
-      <SceneContent palette={palette} shouldAnimate={shouldAnimate} />
+      <SceneContent
+        palette={palette}
+        shouldAnimate={shouldAnimate}
+        vector={vector}
+        matrixPreset={matrixPreset}
+      />
     </Canvas>
   );
 }

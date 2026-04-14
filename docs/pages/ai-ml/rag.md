@@ -69,10 +69,10 @@ of RAG vs fine-tuning.
 - Full pipeline explained textually in segment B with Python code examples
 - Cosine similarity formula given in KaTeX
 - The visual drift from "scattered docs" to "context column" maps to the "chunking + retrieval" concept explained in prose
-- No interactive elements
+- Query preset controls now switch which documents are retrieved and sent into the generator
 
 ## 10. Open Questions / Future Work
-- Add interactive query input: type a query → highlight docs by a pre-computed similarity score
+- Replace presets with a free-form query input backed by pre-computed nearest-neighbour matches
 - Show embedding space as a 2D projection (PCA/t-SNE) of the document vectors
 - Animate the chunking step: show one large doc rectangle splitting into smaller pieces
 - Highlight context window capacity with a "fills up" animation on the LLM box
@@ -81,3 +81,4 @@ of RAG vs fine-tuning.
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — 16-doc corpus, query sphere, similarity rays, top-3 retrieval, LLM generation |
+| 2026-04-13 | Fre-ed Team | Added query preset controls, shared lesson overlays, and reduced-motion aware camera motion |

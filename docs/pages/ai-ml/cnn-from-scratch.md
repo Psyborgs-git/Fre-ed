@@ -83,7 +83,7 @@ at each stage.
 
 ## 10. Open Questions / Future Work
 - Use `InstancedMesh` for pixel grids (massive draw call reduction)
-- Add interactive filter editor: modify kernel weights, see feature map update live
+- Replace kernel presets with a full per-cell filter editor and live numeric kernel table
 - Animate multiple filter channels in parallel (4+ feature maps stacked in Z)
 - Show gradient flow back through the conv layer (deconvolution visualisation)
 - Add depth dimension: render stacked feature maps to show channel dimension
@@ -92,3 +92,4 @@ at each stage.
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — sliding filter → feature map → pool → FC pipeline |
+| 2026-04-13 | Fre-ed Team | Added kernel presets, shared legend/prompt overlays, and reduced-motion camera behavior |

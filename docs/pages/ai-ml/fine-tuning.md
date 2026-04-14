@@ -75,10 +75,10 @@ and how to decide between fine-tuning, prompting, and RAG for a given production
 - The visual plateau → valley metaphor directly maps to the "pre-trained → fine-tuned" pipeline
   described in the ASCII art diagram in segment B
 - Gradient arrows reinforce the gradient descent concept (pointing downhill = parameter update direction)
-- No interactive elements
+- Optimizer and learning-rate controls now let readers compare update styles without leaving the lesson shell
 
 ## 10. Open Questions / Future Work
-- Interactive "dataset size" slider: user adjusts number of fine-tuning examples → valley sharpens
+- Add a dataset-size control so the valley sharpness changes along with the optimizer path
 - Show the KL divergence constraint from PPO as an "exclusion sphere" around the pre-trained point
 - Add a second camera path option: "loss over training steps" side view (traditional 2D loss curve)
 - Animate the RLHF reward signal: show reward scores appearing above each candidate response
@@ -87,3 +87,4 @@ and how to decide between fine-tuning, prompting, and RAG for a given production
 | Date | Author | Change |
 |---|---|---|
 | 2026-04-11 | Fre-ed Team | Initial implementation — parametric loss terrain, pre-trained plateau sphere, gradient arrows, optimisation trail, fine-tuned valley sphere, SFT/RLHF/DPO content |
+| 2026-04-13 | Fre-ed Team | Added optimizer and learning-rate controls, shared scene overlays, and reduced-motion handling |
