@@ -83,7 +83,8 @@ if (missing.length > 0) {
   missing.forEach((r) => console.error(`  ✗  docs/pages/${r}.md`));
   console.error('');
   console.error(
-    `Create these files from the template at docs/pages/_template.md\n` +
+    `Create these files under docs/pages/ using the standard sections:\n` +
+    `## 1. Route, ## 2. Learning Goal, ## 3. Scene Concept, ## 4. Scroll Choreography, ## 5. Content Outline\n` +
     `Fill every section — no placeholders.`
   );
   console.error('');

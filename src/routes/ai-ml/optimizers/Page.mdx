@@ -1,0 +1,176 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## The optimisation problem
+
+Training a neural network means finding a parameter vector $\theta^*$ that minimises a loss function $\mathcal{L}(\theta)$ over a dataset. Because $\mathcal{L}$ is defined over millions of parameters, no closed-form solution exists — we navigate the loss landscape iteratively.
+
+The loss landscape has saddle points, narrow valleys, flat plateaus, and many local minima. The choice of optimiser determines **how fast** and **how reliably** you find a good minimum.
+
+The 3D scene shows four optimisers racing down a banana-shaped (Rosenbrock) loss surface toward the global minimum (white dot).
+
+## Stochastic Gradient Descent
+
+**SGD** is the foundation. At each step, compute the gradient on a mini-batch and move opposite to it:
+
+$$
+\theta_{t+1} = \theta_t - \eta \nabla_\theta \mathcal{L}(\theta_t; \mathcal{B}_t)
+$$
+
+- $\eta$ — learning rate (most critical hyperparameter)
+- $\mathcal{B}_t$ — random mini-batch of examples
+
+The "stochastic" part introduces noise that helps escape shallow local minima.
+But vanilla SGD oscillates badly in narrow valleys — it overshoots perpendicular
+to the valley while moving too slowly along it.
+
+<CodeBlock lang="python">{`optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
+for batch in dataloader:
+    loss = criterion(model(batch.x), batch.y)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()`}</CodeBlock>
+
+## SGD with Momentum
+
+Momentum adds a **velocity** term that accumulates gradient history:
+
+$$
+v_{t+1} = \beta v_t + (1-\beta)\nabla_\theta \mathcal{L}(\theta_t)
+$$
+$$
+\theta_{t+1} = \theta_t - \eta v_{t+1}
+$$
+
+With $\beta \approx 0.9$, the optimiser builds up speed in consistent directions and
+dampens oscillations in high-curvature dimensions.
+**Nesterov momentum** evaluates the gradient at the "lookahead" position for further speedup.
+
+<CodeBlock lang="python">{`# Momentum
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+
+# Nesterov momentum
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, nesterov=True)`}</CodeBlock>
+
+## AdaGrad and the adaptive idea
+
+The problem with momentum: it uses the **same learning rate** for all parameters.
+Some features are rare (sparse gradients), others appear every batch.
+
+**AdaGrad** adapts the learning rate per parameter by dividing by the accumulated
+squared gradients:
+
+$$
+G_t = G_{t-1} + g_t^2, \qquad
+\theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{G_t + \varepsilon}} \cdot g_t
+$$
+
+Parameters with large past gradients get a smaller effective learning rate.
+This is great for NLP with sparse embeddings — but the monotonically growing
+$G_t$ causes the learning rate to shrink to near-zero over time.
+
+## RMSProp
+
+**RMSProp** (Hinton, 2012) fixes AdaGrad's shrinking rate by using an
+**exponential moving average** of squared gradients instead:
+
+$$
+E[g^2]_t = \rho E[g^2]_{t-1} + (1-\rho) g_t^2
+$$
+$$
+\theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{E[g^2]_t + \varepsilon}} \cdot g_t
+$$
+
+With $\rho \approx 0.9$, old gradients are downweighted and the denominator stays
+meaningful throughout training.
+
+## Adam: the workhorse
+
+**Adam** (Kingma & Ba, 2014) combines momentum *and* per-parameter adaptation:
+
+$$
+m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t \quad \text{(first moment)}
+$$
+$$
+v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \quad \text{(second moment)}
+$$
+$$
+\hat{m}_t = \frac{m_t}{1-\beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1-\beta_2^t} \quad \text{(bias correction)}
+$$
+$$
+\theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{\hat{v}_t} + \varepsilon} \hat{m}_t
+$$
+
+Defaults: $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\varepsilon = 10^{-8}$, $\eta = 3\times10^{-4}$.
+The bias correction fixes the cold-start bias when $m_0 = v_0 = 0$.
+
+<Callout type="note">
+Adam is the default for most modern deep learning — transformers, diffusion models,
+and GANs. Its adaptive rates are crucial when loss landscapes are non-stationary.
+</Callout>
+
+<CodeBlock lang="python">{`# Adam — most common choice for transformers
+optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, betas=(0.9, 0.999))
+
+# AdamW — Adam + decoupled weight decay (Loshchilov & Hutter, 2017)
+# Nearly always prefer AdamW over Adam for transformer training
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=0.01)`}</CodeBlock>
+
+## AdamW: decoupled weight decay
+
+Standard Adam applies weight decay *inside* the adaptive update, which couples
+it to the learning rate in a non-standard way. **AdamW** applies weight decay as
+a separate, direct regularisation step:
+
+$$
+\theta_{t+1} = \theta_{t+1}^{\text{Adam}} - \eta\lambda\theta_t
+$$
+
+This is the correct formulation and is preferred for all transformer training.
+
+## Learning rate schedules
+
+The learning rate itself should not stay constant.
+Common schedules used with Adam:
+
+**Cosine annealing with warmup:**
+
+$$
+\eta(t) = \begin{cases}
+  \eta_\text{max} \cdot t / t_\text{warmup} & t < t_\text{warmup} \\
+  \eta_\text{min} + \frac{1}{2}(\eta_\text{max}-\eta_\text{min})(1 + \cos(\pi \tfrac{t-t_\text{warmup}}{T-t_\text{warmup}})) & \text{otherwise}
+\end{cases}
+$$
+
+<CodeBlock lang="python">{`from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+
+# 500 warm-up steps then cosine decay over 10 000 total steps
+warmup   = LinearLR(optimizer, start_factor=1e-4, total_iters=500)
+cosine   = CosineAnnealingLR(optimizer, T_max=9_500, eta_min=1e-6)
+scheduler = SequentialLR(optimizer, schedulers=[warmup, cosine], milestones=[500])`}</CodeBlock>
+
+## When SGD still wins
+
+Despite Adam's widespread use, well-tuned SGD with momentum outperforms Adam on:
+
+- **ResNets** trained on ImageNet (achieves higher final accuracy)
+- **Small datasets** where Adam can overfit memorising trajectories
+- **Fine-tuning** from pre-trained vision models
+
+The trade-off: SGD requires much more careful LR tuning, warmup, and schedule
+design. Adam is more robust to hyperparameter choices.
+
+| Optimiser | Pros | Cons |
+|---|---|---|
+| SGD | Generalises well, predictable | Sensitive to LR, slow with curvature |
+| SGD+Momentum | Faster than SGD | Still needs careful LR |
+| RMSProp | Handles non-stationary losses | No built-in momentum |
+| Adam | Fast, robust defaults | Can overfit; worse final accuracy on some tasks |
+| AdamW | Best of Adam + proper regularisation | Same caveats as Adam |
+
+## Summary
+
+Optimisers are gradient descent with memory and adaptation.
+Momentum smooths the trajectory; adaptive rates give each parameter its own pace.
+Adam combines both and reaches good solutions quickly — making it the default for transformers and most new architectures. But for vision models, well-tuned SGD with cosine LR often wins in the end.

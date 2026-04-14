@@ -1,0 +1,182 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## A generative model from first principles
+
+Generative models learn to sample from a data distribution $p(\mathbf{x})$.
+**Diffusion models** take an indirect route: instead of directly parameterising
+$p(\mathbf{x})$, they learn to reverse a process that destroys structure.
+
+The scene shows $T = 8$ timesteps left to right:
+- **Left (clean):** Original data points cluster together — structured.
+- **Right (pure noise):** Gaussian noise — unstructured.
+
+Training teaches a neural network to run this film **in reverse**: starting
+from pure noise and producing structured data.
+
+## The forward process
+
+**DDPM** (Ho et al., 2020) defines a fixed Markov chain that gradually adds
+Gaussian noise over $T$ steps:
+
+$$
+q(\mathbf{x}_t \mid \mathbf{x}_{t-1}) = \mathcal{N}(\mathbf{x}_t;\,
+  \sqrt{1-\beta_t}\,\mathbf{x}_{t-1},\, \beta_t \mathbf{I})
+$$
+
+where $\beta_1 < \beta_2 < \ldots < \beta_T$ is a **noise schedule** (typically linear
+or cosine from 0.0001 to 0.02).
+
+A key mathematical identity: we can sample $\mathbf{x}_t$ at any step **directly**
+from $\mathbf{x}_0$ without running all intermediate steps:
+
+$$
+q(\mathbf{x}_t \mid \mathbf{x}_0) = \mathcal{N}(\mathbf{x}_t;\,
+  \sqrt{\bar\alpha_t}\,\mathbf{x}_0,\, (1-\bar\alpha_t)\mathbf{I})
+$$
+
+where $\bar\alpha_t = \prod_{s=1}^t (1-\beta_s)$.
+
+In practice:
+
+$$
+\mathbf{x}_t = \sqrt{\bar\alpha_t}\,\mathbf{x}_0 + \sqrt{1-\bar\alpha_t}\,\boldsymbol{\varepsilon},
+\quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})
+$$
+
+This is just a weighted mixture of signal and noise.
+
+## The reverse process
+
+The reverse (denoising) process is modelled by a neural network $\epsilon_\theta$
+that predicts the noise added at each step:
+
+$$
+p_\theta(\mathbf{x}_{t-1} \mid \mathbf{x}_t) =
+  \mathcal{N}(\mathbf{x}_{t-1};\, \mu_\theta(\mathbf{x}_t, t),\, \sigma_t^2 \mathbf{I})
+$$
+
+where $\mu_\theta$ is computed from the predicted noise $\epsilon_\theta(\mathbf{x}_t, t)$:
+
+$$
+\mu_\theta(\mathbf{x}_t, t) = \frac{1}{\sqrt{\alpha_t}}\left(
+  \mathbf{x}_t - \frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\,\epsilon_\theta(\mathbf{x}_t, t)
+\right)
+$$
+
+## Training objective
+
+DDPM's training loss is a simplified **evidence lower bound (ELBO)**:
+
+$$
+\mathcal{L}_{\text{simple}} = \mathbb{E}_{t,\mathbf{x}_0,\boldsymbol{\varepsilon}}\left[
+  \|\boldsymbol{\varepsilon} - \epsilon_\theta(\mathbf{x}_t, t)\|^2
+\right]
+$$
+
+**The training loop:**
+1. Sample a data point $\mathbf{x}_0 \sim p_\text{data}$
+2. Sample a timestep $t \sim \text{Uniform}(1, T)$
+3. Sample noise $\boldsymbol\varepsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$
+4. Compute noisy sample $\mathbf{x}_t = \sqrt{\bar\alpha_t}\mathbf{x}_0 + \sqrt{1-\bar\alpha_t}\boldsymbol\varepsilon$
+5. Minimise $\|\boldsymbol\varepsilon - \epsilon_\theta(\mathbf{x}_t, t)\|^2$
+
+<CodeBlock lang="python">{`import torch
+import torch.nn as nn
+
+def linear_beta_schedule(T=1000):
+    return torch.linspace(1e-4, 0.02, T)
+
+betas      = linear_beta_schedule()
+alphas     = 1 - betas
+alpha_bars = torch.cumprod(alphas, dim=0)
+
+def q_sample(x0, t, noise=None):
+    """Forward process: x0 → x_t"""
+    if noise is None:
+        noise = torch.randn_like(x0)
+    a_bar = alpha_bars[t].view(-1, 1, 1, 1)
+    return a_bar.sqrt() * x0 + (1 - a_bar).sqrt() * noise, noise
+
+def ddpm_loss(model, x0):
+    B = x0.shape[0]
+    t = torch.randint(0, len(betas), (B,), device=x0.device)
+    x_t, noise = q_sample(x0, t)
+    pred_noise = model(x_t, t)          # U-Net or DiT predicts noise
+    return nn.functional.mse_loss(pred_noise, noise)`}</CodeBlock>
+
+<Callout type="note">
+DDPM sampling requires $T = 1000$ denoising steps — expensive at inference time.
+DDIM and DPM-Solver reduce this to 20–50 steps with near-identical quality.
+</Callout>
+
+## The denoising network: U-Net
+
+For images, the denoising network $\epsilon_\theta$ is typically a **U-Net**:
+- An encoder that downsamples the image through convolutional blocks
+- A decoder with skip connections from the encoder
+- A **time embedding** (sinusoidal + MLP) injected at each layer so the network
+  knows which noise level it's denoising
+
+Attention layers at the bottleneck allow the network to reason about global structure.
+
+## Score matching and the connection to SDEs
+
+Song et al. (2020) unified diffusion models via **stochastic differential equations**.
+The forward process is a continuous SDE:
+
+$$
+d\mathbf{x} = \mathbf{f}(\mathbf{x}, t)\,dt + g(t)\,d\mathbf{w}
+$$
+
+The reverse SDE has a form that involves the **score function** $\nabla_\mathbf{x} \log p_t(\mathbf{x})$:
+
+$$
+d\mathbf{x} = [\mathbf{f}(\mathbf{x},t) - g(t)^2 \nabla_\mathbf{x} \log p_t(\mathbf{x})]\,dt + g(t)\,d\bar\mathbf{w}
+$$
+
+A **score network** $s_\theta(\mathbf{x}, t) \approx \nabla_\mathbf{x} \log p_t(\mathbf{x})$ is
+equivalent to the noise predictor $\epsilon_\theta$, linking diffusion to score-based generative models.
+
+## Latent diffusion (Stable Diffusion)
+
+Running diffusion in pixel space is expensive for high-resolution images.
+**Latent diffusion** (Rombach et al., 2022) solves this by:
+
+1. Compressing images into a low-dimensional latent space with a VAE encoder
+2. Running the diffusion process in **latent space** (8–16× smaller)
+3. Conditioning on text via cross-attention with a CLIP/T5 text encoder
+4. Decoding the final denoised latent back to pixel space with the VAE decoder
+
+This is the architecture behind **Stable Diffusion**, **FLUX**, and **Imagen**.
+
+## Classifier-free guidance
+
+Standard conditional generation uses a classifier gradient to guide sampling.
+**Classifier-free guidance** (Ho & Salimans, 2022) trains a single model that handles
+both conditional and unconditional generation:
+
+$$
+\tilde\epsilon_\theta(\mathbf{x}_t, c) =
+  (1 + w)\,\epsilon_\theta(\mathbf{x}_t, c) - w\,\epsilon_\theta(\mathbf{x}_t, \varnothing)
+$$
+
+where $c$ is the conditioning signal (text embedding), $\varnothing$ is null conditioning,
+and $w > 0$ is the **guidance scale**.
+
+Higher $w$ → outputs closely match the text prompt but are less diverse.
+Lower $w$ → more diverse outputs but weaker prompt adherence.
+
+## DiT: Diffusion Transformers
+
+Recent work replaces the U-Net with a **transformer** operating on **image patches**.
+**DiT** (Peebles & Xie, 2022) processes latent patches as a sequence, using
+standard transformer blocks with adaptive layer norm for timestep conditioning.
+FLUX.1, SORA, and Stable Diffusion 3 use DiT variants.
+
+## Summary
+
+Diffusion models define generation as learning to reverse a known noise process.
+The training objective is simple — predict the noise — but the results are state of the art.
+Latent diffusion scales to megapixel images; classifier-free guidance adds controllability.
+The same framework applies to audio, 3D shapes, protein structures, and video.

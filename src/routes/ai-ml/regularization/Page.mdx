@@ -1,0 +1,176 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## The overfitting problem
+
+A neural network with millions of parameters can memorise its training set perfectly —
+achieving 0% training loss while failing completely on new data. This gap between
+training and test performance is **overfitting**.
+
+The solution: **regularisation** — techniques that constrain the model's freedom
+during training so it learns generalisable structure rather than memorising noise.
+
+The 3D scene shows a 4-layer network. After 35% scroll, **dropout** activates:
+grey/dark neurons are silenced for this training step, forcing the active (cyan) neurons to be more robust.
+
+## Dropout
+
+**Dropout** (Srivastava et al., 2014) randomly sets each neuron's output to zero
+during training, independently at each training step, with probability $p$:
+
+$$
+\tilde{h}_i = \frac{1}{1-p} \cdot m_i \cdot h_i, \quad m_i \sim \text{Bernoulli}(1-p)
+$$
+
+The $\frac{1}{1-p}$ scaling (inverted dropout) ensures the expected output is
+unchanged — no adjustment needed at inference.
+
+At test time, dropout is disabled. All neurons participate, approximating an
+average over the exponentially many sub-networks seen during training.
+
+<Callout type="note">
+This is equivalent to training an ensemble of $2^N$ different networks (where $N$
+is the number of dropout-able units) and averaging their predictions at inference time.
+</Callout>
+
+<CodeBlock lang="python">{`import torch.nn as nn
+
+class MLPWithDropout(nn.Module):
+    def __init__(self, d_in, d_hidden, d_out, drop_rate=0.3):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(d_in, d_hidden),
+            nn.ReLU(),
+            nn.Dropout(p=drop_rate),   # silences 30% of neurons per forward pass
+            nn.Linear(d_hidden, d_hidden),
+            nn.ReLU(),
+            nn.Dropout(p=drop_rate),
+            nn.Linear(d_hidden, d_out),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+model = MLPWithDropout(784, 512, 10, drop_rate=0.4)
+model.train()    # dropout active
+model.eval()     # dropout disabled — inference mode`}</CodeBlock>
+
+## Dropout in transformers
+
+In transformers, dropout is applied after:
+1. Each attention weight matrix (pre-value aggregation)
+2. Each feed-forward sub-layer output
+3. Positional embedding addition
+
+Typical drop rates: 0.1 for large models, 0.3 for smaller models.
+BERT uses $p = 0.1$; GPT-2 uses $p = 0.1$.
+
+## L2 regularisation (weight decay)
+
+**L2 regularisation** adds a penalty to the loss for large weights:
+
+$$
+\mathcal{L}_{\text{reg}} = \mathcal{L}_{\text{task}} + \frac{\lambda}{2} \|\theta\|^2
+$$
+
+The gradient update becomes:
+
+$$
+\theta_{t+1} = \theta_t - \eta (\nabla_\theta \mathcal{L}_{\text{task}} + \lambda \theta_t)
+  = (1 - \eta\lambda) \theta_t - \eta \nabla_\theta \mathcal{L}_{\text{task}}
+$$
+
+The factor $(1 - \eta\lambda)$ **shrinks** all weights by a constant fraction each step —
+hence the name "weight decay." Large weights are penalised, biasing the network toward
+simpler solutions.
+
+<CodeBlock lang="python">{`# L2 via weight_decay in the optimizer (AdamW uses decoupled decay)
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=3e-4,
+    weight_decay=1e-2   # λ = 0.01 — shrinks weights by 1% relative per step
+)
+
+# Or manually in the loss (standard SGD form):
+l2_penalty = sum(p.pow(2).sum() for p in model.parameters())
+loss = task_loss + 1e-4 * l2_penalty`}</CodeBlock>
+
+## L1 regularisation (sparsity)
+
+**L1 regularisation** penalises the sum of absolute weights:
+
+$$
+\mathcal{L}_{\text{reg}} = \mathcal{L}_{\text{task}} + \lambda \|\theta\|_1
+$$
+
+L1 produces **sparse** solutions — weights are pushed exactly to zero rather than just
+toward zero. This makes L1 useful for feature selection: unimportant connections
+are completely pruned.
+
+| | L1 | L2 |
+|---|---|---|
+| Penalty | $\lambda\sum |w_i|$ | $\frac{\lambda}{2}\sum w_i^2$ |
+| Effect | Sparsity (exact zeros) | Smallness (distributes weight evenly) |
+| Use case | Feature selection, pruning | Default regulariser for deep networks |
+
+## Batch normalisation as implicit regularisation
+
+BatchNorm inadvertently regularises by introducing noise from batch statistics.
+The mean and variance of each mini-batch slightly differ from the true dataset
+statistics, creating a noise signal similar to dropout. This is why adding
+BatchNorm often allows you to reduce or eliminate explicit dropout.
+
+## Early stopping
+
+**Early stopping** monitors validation loss during training and halts when it
+stops improving — preventing the model from overfitting further:
+
+<CodeBlock lang="python">{`best_val_loss = float('inf')
+patience = 5
+no_improve = 0
+
+for epoch in range(max_epochs):
+    train_one_epoch(model, optimizer, train_loader)
+    val_loss = evaluate(model, val_loader)
+
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        torch.save(model.state_dict(), 'best.pt')
+        no_improve = 0
+    else:
+        no_improve += 1
+        if no_improve >= patience:
+            print(f'Early stopping at epoch {epoch}')
+            break
+
+model.load_state_dict(torch.load('best.pt'))`}</CodeBlock>
+
+## Data augmentation as regularisation
+
+The most powerful regulariser is often simply **more data** — but when real data is expensive,
+augmentation synthetically expands the dataset by applying label-preserving transforms:
+
+- **Images:** random crop, flip, colour jitter, Cutout, MixUp, AugMix
+- **Text:** synonym replacement, back-translation, random deletion
+- **Audio:** pitch shift, time stretch, SpecAugment
+
+Augmentation forces the model to learn invariances that generalise better.
+
+## Choosing regularisation
+
+| Technique | Best for | Typical values |
+|---|---|---|
+| Dropout | MLPs, transformer FF layers | $p = 0.1$–$0.5$ |
+| Weight decay (L2) | Almost everything | $\lambda = 10^{-4}$–$10^{-2}$ |
+| BatchNorm | CNNs, ResNets | — |
+| LayerNorm | Transformers | — |
+| Early stopping | Any network | Patience = 3–10 epochs |
+| Data augmentation | Vision, audio, NLP | Task-dependent |
+
+## Summary
+
+Regularisation constrains the hypothesis space so networks learn generalisable features.
+Dropout creates implicit ensembles; weight decay penalises complexity; early stopping
+capitalises on the fact that training and test loss diverge over time.
+In practice, transformers rely on AdamW weight decay ($\lambda \approx 0.01$) and
+small dropout rates ($p = 0.1$), while CNNs rely more heavily on BatchNorm and data augmentation.

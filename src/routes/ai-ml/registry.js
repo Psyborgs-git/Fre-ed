@@ -9,62 +9,53 @@ import { meta as moeMeta } from './moe/meta.js';
 import { meta as ragMeta } from './rag/meta.js';
 import { meta as loraMeta } from './lora/meta.js';
 import { meta as fineTuningMeta } from './fine-tuning/meta.js';
+import { meta as embeddingsMeta } from './embeddings/meta.js';
+import { meta as normalizationMeta } from './normalization/meta.js';
+import { meta as optimizersMeta } from './optimizers/meta.js';
+import { meta as regularizationMeta } from './regularization/meta.js';
+import { meta as rnnLstmMeta } from './rnn-lstm/meta.js';
+import { meta as diffusionMeta } from './diffusion/meta.js';
 
 export const LIVE_AI_ML_LESSONS = [
   { path: '/ai-ml/perceptron', meta: perceptronMeta },
   { path: '/ai-ml/mlp', meta: mlpMeta },
   { path: '/ai-ml/backprop', meta: backpropMeta },
   { path: '/ai-ml/cnn-from-scratch', meta: cnnMeta },
+  { path: '/ai-ml/embeddings', meta: embeddingsMeta },
   { path: '/ai-ml/attention', meta: attentionMeta },
   { path: '/ai-ml/transformer', meta: transformerMeta },
+  { path: '/ai-ml/normalization', meta: normalizationMeta },
+  { path: '/ai-ml/optimizers', meta: optimizersMeta },
+  { path: '/ai-ml/regularization', meta: regularizationMeta },
+  { path: '/ai-ml/rnn-lstm', meta: rnnLstmMeta },
   { path: '/ai-ml/moe', meta: moeMeta },
   { path: '/ai-ml/rag', meta: ragMeta },
   { path: '/ai-ml/lora', meta: loraMeta },
   { path: '/ai-ml/fine-tuning', meta: fineTuningMeta },
+  { path: '/ai-ml/diffusion', meta: diffusionMeta },
 ];
 
 export const COMING_SOON_AI_ML_LESSONS = [
   {
-    path: '/ai-ml/embeddings',
-    title: 'Embeddings',
-    desc: 'How discrete tokens become continuous vectors. Word2Vec, cosine similarity, king−man+woman=queen, and positional encodings.',
+    path: '/ai-ml/gans',
+    title: 'Generative Adversarial Networks',
+    desc: 'A generator and discriminator locked in a minimax game. How GANs learn to produce photorealistic images through adversarial training.',
     status: 'coming-soon',
-    tags: ['embeddings', 'nlp', 'word2vec'],
+    tags: ['gans', 'generative-ai', 'deep-learning'],
   },
   {
-    path: '/ai-ml/normalization',
-    title: 'Normalization',
-    desc: 'BatchNorm, LayerNorm, and RMSNorm — keeping activations well-behaved so deep networks can actually train.',
+    path: '/ai-ml/graph-neural-networks',
+    title: 'Graph Neural Networks',
+    desc: 'Extend deep learning to graph-structured data. Message passing, GCN, GAT, and applications in molecules, social networks, and knowledge graphs.',
     status: 'coming-soon',
-    tags: ['normalization', 'batch-norm', 'layer-norm'],
+    tags: ['gnn', 'graph-learning', 'deep-learning'],
   },
   {
-    path: '/ai-ml/optimizers',
-    title: 'Optimizers',
-    desc: 'SGD vs Momentum vs Adam racing through the same loss landscape. Why adaptive learning rates win.',
+    path: '/ai-ml/reinforcement-learning',
+    title: 'Reinforcement Learning',
+    desc: 'An agent learns by trial and error — maximising cumulative reward. Q-learning, policy gradients, and PPO from the ground up.',
     status: 'coming-soon',
-    tags: ['optimizers', 'adam', 'training'],
-  },
-  {
-    path: '/ai-ml/regularization',
-    title: 'Dropout & Regularization',
-    desc: 'Randomly silence neurons during training to create an implicit ensemble. Dropout, L2 decay, and early stopping.',
-    status: 'coming-soon',
-    tags: ['regularization', 'dropout', 'overfitting'],
-  },
-  {
-    path: '/ai-ml/rnn-lstm',
-    title: 'RNN & LSTM',
-    desc: 'A hidden state that travels through time. How LSTMs use forget, input, and output gates to preserve long-range memory.',
-    status: 'coming-soon',
-    tags: ['rnn', 'lstm', 'sequences'],
-  },
-  {
-    path: '/ai-ml/diffusion',
-    title: 'Diffusion Models',
-    desc: 'Add noise until structure vanishes, then learn to reverse the process. DDPM, score matching, and latent diffusion.',
-    status: 'coming-soon',
-    tags: ['diffusion', 'generative-ai', 'ddpm'],
+    tags: ['rl', 'reinforcement-learning', 'deep-learning'],
   },
 ];
 

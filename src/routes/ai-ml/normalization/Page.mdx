@@ -1,0 +1,153 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Why activations go wrong
+
+Deep networks fail to train when activations:
+
+- **Explode** — grow exponentially with depth, causing NaN gradients
+- **Vanish** — shrink exponentially, leaving early layers with zero gradient signal
+
+Both pathologies are symptoms of the same problem: layer outputs with unbounded scale.
+**Normalisation** solves this by rescaling activations at every layer so they stay
+in a useful operating range for the next layer's weights.
+
+The 3D scene shows activation bars before normalisation (violet, spread and shifted)
+and after (right column, centred near zero with tighter spread).
+
+## Batch Normalisation
+
+**BatchNorm** (Ioffe & Szegedy, 2015) normalises across the **batch dimension**.
+For each feature $j$ in a mini-batch of $m$ samples:
+
+$$
+\hat{x}_{ij} = \frac{x_{ij} - \mu_j}{\sqrt{\sigma_j^2 + \varepsilon}}
+$$
+
+where $\mu_j = \frac{1}{m}\sum_{i=1}^m x_{ij}$ and $\sigma_j^2 = \frac{1}{m}\sum_{i=1}^m (x_{ij}-\mu_j)^2$.
+
+Then a learnable **affine transform** restores representational power:
+
+$$
+y_{ij} = \gamma_j \hat{x}_{ij} + \beta_j
+$$
+
+$\gamma$ and $\beta$ are trained parameters — the network can undo the normalisation
+if needed, but it starts from a well-behaved initialisation.
+
+<Callout type="note">
+BatchNorm requires a large enough batch to estimate statistics accurately.
+At inference time it uses **running statistics** computed during training.
+</Callout>
+
+<CodeBlock lang="python">{`import torch.nn as nn
+
+# BatchNorm on a conv feature map [B, C, H, W]
+# normalises over B, H, W for each channel C
+bn = nn.BatchNorm2d(num_features=256)
+
+# BatchNorm on a linear layer output [B, F]
+# normalises over B for each feature F
+bn_linear = nn.BatchNorm1d(num_features=512)`}</CodeBlock>
+
+## Layer Normalisation
+
+**LayerNorm** (Ba et al., 2016) normalises across the **feature dimension** within
+each individual sample. This makes it batch-size independent — crucial for
+transformers where sequence lengths vary:
+
+$$
+\hat{x}_i = \frac{x_i - \mu}{\sqrt{\sigma^2 + \varepsilon}}, \quad
+\mu = \frac{1}{H}\sum_{k=1}^H x_k, \quad
+\sigma^2 = \frac{1}{H}\sum_{k=1}^H (x_k - \mu)^2
+$$
+
+The $\mu$ and $\sigma$ are computed per sample over the hidden dimension $H$.
+
+LayerNorm is the default in all major transformer architectures (BERT, GPT, LLaMA).
+It works identically at train and inference time — no running statistics needed.
+
+<CodeBlock lang="python">{`# LayerNorm on transformer hidden states [B, L, d_model]
+# normalises over last dim d_model for each (B, L) pair
+ln = nn.LayerNorm(normalized_shape=768)
+
+# Applied inside a transformer block:
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model, n_heads):
+        super().__init__()
+        self.ln1   = nn.LayerNorm(d_model)
+        self.attn  = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
+        self.ln2   = nn.LayerNorm(d_model)
+        self.ff    = nn.Sequential(nn.Linear(d_model, 4*d_model), nn.GELU(), nn.Linear(4*d_model, d_model))
+
+    def forward(self, x):
+        x = x + self.attn(self.ln1(x), self.ln1(x), self.ln1(x))[0]  # pre-LN
+        x = x + self.ff(self.ln2(x))
+        return x`}</CodeBlock>
+
+## Pre-LN vs Post-LN
+
+Original BERT used **post-LN**: normalise after adding the residual.
+GPT-2 and later models switched to **pre-LN**: normalise the *input* before the
+sub-layer.
+
+Pre-LN training is more stable at scale — gradients flow more cleanly through
+the residual stream because the LN is inside the branch, not on the main path.
+
+## RMSNorm
+
+**RMSNorm** (Zhang & Sennrich, 2019) drops the mean subtraction and only
+rescales by the root-mean-square:
+
+$$
+\hat{x}_i = \frac{x_i}{\text{RMS}(\mathbf{x})} \cdot \gamma_i, \quad
+\text{RMS}(\mathbf{x}) = \sqrt{\frac{1}{H}\sum_{k=1}^H x_k^2}
+$$
+
+This is **faster** (no mean computation) and **simpler**, with almost no
+accuracy loss in practice. LLaMA, Mistral, and Gemma all use RMSNorm.
+
+<CodeBlock lang="python">{`class RMSNorm(nn.Module):
+    def __init__(self, d_model: int, eps: float = 1e-8):
+        super().__init__()
+        self.scale = nn.Parameter(torch.ones(d_model))
+        self.eps   = eps
+
+    def forward(self, x):
+        rms = x.pow(2).mean(-1, keepdim=True).add(self.eps).sqrt()
+        return x / rms * self.scale`}</CodeBlock>
+
+## Group Normalisation
+
+**GroupNorm** splits channels into $G$ groups and normalises within each group.
+This is batch-size independent like LayerNorm but better suited to image features.
+
+| Method | Normalises over | Batch-free? | Used in |
+|---|---|---|---|
+| BatchNorm | Batch × spatial | No | CNNs, vision |
+| LayerNorm | Feature dim | Yes | Transformers |
+| RMSNorm | Feature dim (no mean) | Yes | LLaMA, Gemma |
+| GroupNorm | Channel groups | Yes | Object detection, segmentation |
+| InstanceNorm | Spatial per sample | Yes | Style transfer |
+
+## Why normalisation helps optimisation
+
+1. **Smoother loss landscape** — large activations create steep, narrow loss valleys;
+   normalisation makes the surface more bowl-shaped and gradient descent more stable.
+
+2. **Allows higher learning rates** — without normalisation, large activations force
+   tiny learning rates to avoid divergence. With it, $\eta$ can be 10–100× larger.
+
+3. **Acts as implicit regularisation** — BatchNorm adds noise from batch statistics,
+   similar to dropout. This noise reduces overfitting.
+
+4. **Reduces internal covariate shift** — as earlier layers update, the distribution
+   of their outputs changes ("covariate shift"), forcing later layers to re-adapt.
+   Normalisation pins the distribution at every layer.
+
+## Summary
+
+Normalisation is the invisible scaffold that makes deep networks trainable.
+BatchNorm conquered CNNs; LayerNorm enabled transformers; RMSNorm simplified
+both. Understanding which axis you normalise over explains why each variant
+fits its architecture — and when to reach for each one.
