@@ -1,0 +1,192 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## What is an embedding?
+
+A neural network can't process the word "cat" directly — it needs numbers.
+An **embedding** is a learned mapping from a discrete token (a word, sub-word, pixel patch…)
+to a dense vector in some $d$-dimensional space.
+
+The 3D scene above places eight tokens in a toy embedding space.
+Tokens with similar meanings end up **geometrically close**:
+
+| Cluster | Tokens | Colour |
+|---|---|---|
+| Royalty | king, queen | Violet |
+| Gender | man, woman | Cyan |
+| Animals | dog, cat | Amber |
+| Geography | paris, france | Green |
+
+<Callout type="note">
+Scroll through to watch clusters appear, similarity lines form, and the famous
+king − man + woman ≈ queen analogy visualised as an amber arrow.
+</Callout>
+
+## From one-hot to dense vectors
+
+Before embeddings, tokens were represented as **one-hot** vectors:
+a vector of zeros with a single 1 at the token's position.
+
+For a vocabulary of size $V$, one-hot vectors have dimension $V$ (often 50 000+),
+are entirely **sparse**, and carry **no similarity information** — "cat" and "dog"
+are just as far apart as "cat" and "democracy".
+
+An embedding matrix $E \in \mathbb{R}^{V \times d}$ projects each one-hot vector
+to a dense $d$-dimensional point (typically $d$ = 128–4 096):
+
+$$
+\mathbf{e}_i = E \, \mathbf{o}_i
+$$
+
+where $\mathbf{o}_i \in \{0,1\}^V$ is the one-hot encoding of token $i$.
+In practice this is just a row lookup, not a matrix multiply.
+
+## Word2Vec: learning geometry from context
+
+Word2Vec (Mikolov et al., 2013) learns embeddings by predicting context:
+
+- **CBOW** — given surrounding words, predict the centre word
+- **Skip-gram** — given a centre word, predict surrounding words
+
+The intuition: words that appear in similar contexts get similar vectors.
+Training maximises the dot product between a token and its context neighbours,
+pushing semantically related words together while pushing unrelated words apart.
+
+$$
+\mathcal{L} = -\sum_{(i,j) \in \text{pairs}} \log \sigma(\mathbf{e}_i \cdot \mathbf{e}_j)
+  + \sum_{k \sim P_n} \log \sigma(-\mathbf{e}_i \cdot \mathbf{e}_k)
+$$
+
+The first term rewards real co-occurrences; the second term (negative sampling)
+penalises pairing with random noise tokens $k$.
+
+## Cosine similarity
+
+Euclidean distance is sensitive to embedding magnitude.
+**Cosine similarity** measures only direction — and direction encodes meaning:
+
+$$
+\text{sim}(u, v) = \frac{u \cdot v}{\|u\|\,\|v\|} \in [-1, 1]
+$$
+
+Values near $+1$ mean semantically similar; near $0$ mean unrelated; near $-1$ mean antonyms.
+
+<CodeBlock lang="python">{`import numpy as np
+
+def cosine_sim(u, v):
+    return np.dot(u, v) / (np.linalg.norm(u) * np.linalg.norm(v))
+
+# After training Word2Vec embeddings:
+print(cosine_sim(E["king"], E["queen"]))   # ≈ 0.75
+print(cosine_sim(E["king"], E["dog"]))     # ≈ 0.12`}</CodeBlock>
+
+## Vector arithmetic and analogies
+
+Embeddings support linear arithmetic over semantic relationships.
+The famous example:
+
+$$
+\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}
+$$
+
+This works because "royalty" is encoded as a consistent **offset** in embedding space.
+The geometry generalises: Paris − France + Germany ≈ Berlin.
+
+These relationships emerge automatically from co-occurrence statistics —
+no one hand-coded them.
+
+## Subword embeddings: BPE and tokenisation
+
+Raw word embeddings fail on rare words ("astrophysics") and can't represent
+words outside the training vocabulary (out-of-vocabulary, OOV).
+
+Modern LLMs use **Byte-Pair Encoding (BPE)** or **SentencePiece** to tokenise
+text into sub-word pieces:
+
+- "astrophysics" → ["astro", "physics"]
+- "unhappiness" → ["un", "happ", "iness"]
+
+Each sub-word gets its own embedding. Rare compound words are composed
+from embeddings of their sub-pieces — no OOV problem.
+
+GPT-4 uses a BPE vocabulary of ~100 000 tokens.
+
+## Positional embeddings
+
+Self-attention is **permutation-invariant** — the same set of tokens in any
+order produces the same output. To encode sequence order, a **positional embedding**
+$\mathbf{p}_i$ is added to the token embedding before the first attention layer:
+
+$$
+\tilde{\mathbf{x}}_i = \mathbf{e}_i + \mathbf{p}_i
+$$
+
+**Sinusoidal PE** (original Transformer):
+
+$$
+p_{i,2k}   = \sin\!\left(\frac{i}{10000^{2k/d}}\right), \quad
+p_{i,2k+1} = \cos\!\left(\frac{i}{10000^{2k/d}}\right)
+$$
+
+**RoPE** (rotary positional encoding, used in LLaMA / GPT-NeoX):
+multiplies query and key vectors by a rotation matrix that depends on position,
+embedding relative distances directly into the attention score.
+
+## Embedding dimensions and the curse of dimensionality
+
+Higher $d$ allows more concepts to be stored **nearly orthogonally** —
+the **Johnson–Lindenstrauss lemma** guarantees that $n$ points can be
+embedded in $O(\log n)$ dimensions with at most $\varepsilon$ distortion.
+
+Typical embedding sizes:
+
+| Model | Vocab | Embedding $d$ |
+|---|---|---|
+| Word2Vec | 3M | 300 |
+| BERT-base | 30 522 | 768 |
+| GPT-3 | 50 257 | 12 288 |
+| GPT-4 | ~100 000 | ~12 288 (est.) |
+
+Training a new embedding table from scratch is expensive.
+**Transfer learning**: start from pre-trained embeddings (e.g. from BERT or LLaMA)
+and fine-tune only for a downstream task.
+
+## PyTorch implementation
+
+<CodeBlock lang="python">{`import torch
+import torch.nn as nn
+
+vocab_size = 50_000
+embed_dim  = 512
+
+# Learnable embedding table — shape [V, d]
+embedding = nn.Embedding(vocab_size, embed_dim)
+
+# Token IDs for a batch of 4 sequences, length 16
+token_ids = torch.randint(0, vocab_size, (4, 16))
+
+# Row lookups → shape [4, 16, 512]
+x = embedding(token_ids)
+
+# Sinusoidal positional encoding
+def sinusoidal_pe(seq_len, d_model):
+    pos   = torch.arange(seq_len).unsqueeze(1)          # [L, 1]
+    dim   = torch.arange(0, d_model, 2)                 # [d/2]
+    denom = 10000 ** (dim / d_model)
+    pe    = torch.zeros(seq_len, d_model)
+    pe[:, 0::2] = torch.sin(pos / denom)
+    pe[:, 1::2] = torch.cos(pos / denom)
+    return pe  # [L, d]
+
+pe = sinusoidal_pe(16, embed_dim)      # [16, 512]
+x  = x + pe.unsqueeze(0)              # broadcast over batch`}</CodeBlock>
+
+## Summary
+
+Embeddings convert discrete tokens into dense, geometry-rich vectors where
+semantically similar tokens cluster together. Word2Vec revealed that meaning can
+be encoded as direction; modern transformers extend this with learned, task-specific
+embeddings and relative positional encodings that scale to sequences of thousands
+of tokens.
+
+Next: **Self-Attention** — how those embedded vectors learn to query each other.

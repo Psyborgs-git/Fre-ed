@@ -254,7 +254,7 @@
     display: grid;
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
     height: calc(100svh - 3.5rem);
-    transition: grid-template-rows 0.24s ease;
+    transition: grid-template-rows 0.24s ease, grid-template-columns 0.24s ease;
     background:
       radial-gradient(circle at top left, color-mix(in srgb, var(--accent-violet) 12%, transparent), transparent 36%),
       radial-gradient(circle at top right, color-mix(in srgb, var(--accent-cyan) 14%, transparent), transparent 42%),
@@ -272,7 +272,7 @@
     min-height: 0;
     overflow: hidden;
     border-bottom: 1px solid var(--line);
-    transition: opacity 0.22s ease, border-color 0.22s ease;
+    transition: opacity 0.22s ease, border-color 0.22s ease, border-width 0.22s ease;
     background:
       radial-gradient(circle at top left, rgba(167, 139, 250, 0.16), transparent 34%),
       radial-gradient(circle at top right, rgba(34, 211, 238, 0.18), transparent 42%),
@@ -704,6 +704,7 @@
     justify-content: center;
   }
 
+  /* ── Fullscreen: small screens (vertical stack, collapse row) ──────── */
   .lesson-shell--scene-full {
     grid-template-rows: minmax(0, 1fr) 0px;
   }
@@ -768,7 +769,36 @@
     }
   }
 
+  /* ── Large screens: horizontal side-by-side grid ────────────────────── */
   @media (min-width: 1024px) {
+    /* Switch from row-stack to column-split */
+    .lesson-shell {
+      grid-template-rows: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    /* Scene panel now has a right border instead of bottom */
+    .lesson-scene-panel {
+      border-bottom: none;
+      border-right: 1px solid var(--line);
+    }
+
+    /* Fullscreen: collapse the appropriate column ─────────────────────── */
+    .lesson-shell--scene-full {
+      grid-template-rows: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) 0px;
+    }
+
+    .lesson-shell--content-full {
+      grid-template-rows: minmax(0, 1fr);
+      grid-template-columns: 0px minmax(0, 1fr);
+    }
+
+    .lesson-shell--scene-full .lesson-scene-panel {
+      border-right-color: transparent;
+    }
+
+    /* Content panel adjustments */
     .lesson-content-panel {
       padding-inline: 2rem;
     }
@@ -777,6 +807,7 @@
       margin-top: -3.75rem;
     }
 
+    /* Scene overlays repositioned for side-by-side layout */
     .lesson-shell--scene-full .lesson-scene-hint {
       bottom: 1.5rem;
       right: 1.5rem;
@@ -790,11 +821,226 @@
     .lesson-shell--scene-full .lesson-scene-scrubber {
       bottom: 1.5rem;
     }
+
+    /* In split mode on large screens, overlay positions within the panel */
+    .lesson-shell:not(.lesson-shell--scene-full) .lesson-scene-hint {
+      bottom: 1rem;
+      right: 1rem;
+    }
+
+    .lesson-shell:not(.lesson-shell--content-full) .lesson-article-card {
+      margin-top: -3.75rem;
+    }
   }
 
   /* KaTeX color fix for light mode */
   :root[data-theme='light'] .katex {
     color: var(--ink-hi);
+  }
+
+  /* ── Quant Trading Todo Page ─────────────────────────────── */
+
+  .quant-todo-page {
+    min-height: 100vh;
+    padding-top: 3.5rem;
+    background: var(--bg-base);
+  }
+
+  .quant-todo-hero {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 3rem;
+    text-align: center;
+  }
+
+  .quant-todo-kicker {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent-cyan);
+    margin-bottom: 1rem;
+  }
+
+  .quant-todo-heading {
+    font-family: 'Space Grotesk', Inter, sans-serif;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 800;
+    line-height: 1.05;
+    color: var(--ink-hi);
+    margin: 0 0 1rem;
+  }
+
+  .quant-todo-sub {
+    font-size: 1.1rem;
+    line-height: 1.65;
+    color: var(--ink-lo);
+    max-width: 52rem;
+    margin: 0 auto 2rem;
+  }
+
+  .quant-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    max-width: 32rem;
+    margin: 0 auto;
+  }
+
+  .quant-progress-bar {
+    flex: 1;
+    height: 0.45rem;
+    border-radius: 9999px;
+    background: var(--line);
+    overflow: hidden;
+  }
+
+  .quant-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent-violet));
+    transition: width 0.4s ease;
+  }
+
+  .quant-progress-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--ink-lo);
+  }
+
+  .quant-todo-grid {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 0 1.5rem 4rem;
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 768px) {
+    .quant-todo-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .quant-todo-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .quant-category {
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    padding: 1.5rem;
+    background: color-mix(in srgb, var(--bg-elev) 96%, transparent);
+    transition: border-color 0.2s ease;
+  }
+
+  .quant-category:hover {
+    border-color: color-mix(in srgb, var(--accent-cyan) 30%, var(--line));
+  }
+
+  .quant-category-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .quant-category-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+  }
+
+  .quant-category-title {
+    font-family: 'Space Grotesk', Inter, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    flex: 1;
+    margin: 0;
+  }
+
+  .quant-category-count {
+    font-size: 0.76rem;
+    font-weight: 600;
+    opacity: 0.75;
+  }
+
+  .quant-topic-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .quant-topic-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .quant-checkbox {
+    flex-shrink: 0;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 0.35rem;
+    border: 1.5px solid var(--line);
+    background: var(--bg-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.12rem;
+    cursor: pointer;
+    color: var(--accent-cyan);
+    transition: border-color 0.18s ease, background 0.18s ease;
+  }
+
+  .quant-checkbox:hover {
+    border-color: var(--accent-cyan);
+  }
+
+  .quant-checkbox--done {
+    background: color-mix(in srgb, var(--accent-cyan) 15%, var(--bg-base));
+    border-color: var(--accent-cyan);
+  }
+
+  .quant-topic-text {
+    flex: 1;
+  }
+
+  .quant-topic-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink-hi);
+    margin: 0 0 0.2rem;
+    transition: color 0.18s ease;
+  }
+
+  .quant-topic-title--done {
+    text-decoration: line-through;
+    color: var(--ink-lo);
+  }
+
+  .quant-topic-desc {
+    font-size: 0.76rem;
+    line-height: 1.5;
+    color: var(--ink-lo);
+    margin: 0;
+  }
+
+  .quant-todo-footer-note {
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--ink-lo);
+    padding: 0 1.5rem 3rem;
+    max-width: 52rem;
+    margin: 0 auto;
   }
 
   /* ── Reduced motion ───────────────────────────────────── */

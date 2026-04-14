@@ -4,6 +4,7 @@ import { useTheme } from '../lib/ThemeContext.jsx';
 const NAV_LINKS = [
   { to: '/blog', label: 'Blog' },
   { to: '/ai-ml', label: 'AI / ML' },
+  { to: '/quant-trading', label: 'Quant' },
   { to: '/about', label: 'About' },
 ];
 

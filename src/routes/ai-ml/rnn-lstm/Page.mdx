@@ -1,0 +1,178 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Sequence modelling before transformers
+
+Before transformers dominated NLP, **recurrent neural networks** (RNNs) were the
+standard architecture for sequences. The key idea: process tokens one at a time,
+maintaining a **hidden state** $h_t$ that summarises everything seen so far.
+
+The 3D scene shows 6 time steps left to right. Violet spheres are input tokens;
+coloured spheres at each step are the hidden state $h_t$.
+
+| 3D object | Meaning |
+|---|---|
+| Violet sphere (bottom row) | Input token $x_t$ at each time step |
+| Coloured sphere (middle row) | Hidden state $h_t$ carrying memory |
+| Horizontal arrow | Recurrent connection $h_t \rightarrow h_{t+1}$ |
+| Green bar (LSTM) | Cell state $c_t$ — the "conveyor belt" |
+| Coloured cubes (LSTM) | Forget / input / output gates |
+
+## The vanilla RNN
+
+A recurrent neural network processes a sequence $x_1, x_2, \ldots, x_T$ by maintaining a hidden state:
+
+$$
+h_t = \tanh(W_h h_{t-1} + W_x x_t + b)
+$$
+
+The same weight matrices $W_h$ and $W_x$ are shared across all time steps.
+The hidden state $h_t$ is passed to the next step, encoding the history.
+
+For classification, a final linear layer maps $h_T$ to output probabilities.
+
+<CodeBlock lang="python">{`import torch
+import torch.nn as nn
+
+class VanillaRNN(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super().__init__()
+        self.rnn = nn.RNN(input_size, hidden_size, batch_first=True)
+        self.fc  = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        # x: [B, T, input_size]
+        out, h_n = self.rnn(x)   # out: [B, T, hidden]; h_n: [1, B, hidden]
+        return self.fc(h_n.squeeze(0))  # final hidden state → class logits`}</CodeBlock>
+
+## The vanishing gradient problem
+
+RNNs struggle with **long-range dependencies**.
+Backpropagation through time (BPTT) computes gradients by unrolling the network
+through all $T$ steps. The gradient of the loss with respect to $h_1$ involves
+the product of $T-1$ Jacobians:
+
+$$
+\frac{\partial \mathcal{L}}{\partial h_1} = \frac{\partial \mathcal{L}}{\partial h_T}
+  \prod_{t=2}^{T} \frac{\partial h_t}{\partial h_{t-1}}
+$$
+
+Each factor is bounded by the largest singular value of $W_h$ scaled by
+the derivative of $\tanh$. If $\|W_h\| < 1$, the product **vanishes exponentially**
+as $T$ grows — early time steps receive near-zero gradient signal.
+
+<Callout type="note">
+Vanilla RNNs effectively can't learn dependencies longer than ~10–20 steps.
+The scene shows this: without LSTM, hidden state brightness decays rapidly.
+</Callout>
+
+## LSTM: gating the memory
+
+**Long Short-Term Memory** (Hochreiter & Schmidhuber, 1997) introduces a **cell state** $c_t$
+— a separate memory lane that flows alongside the hidden state.
+Three **gates** control what is remembered, written, and emitted:
+
+$$
+f_t = \sigma(W_f [h_{t-1}, x_t] + b_f) \quad \text{(forget gate)}
+$$
+$$
+i_t = \sigma(W_i [h_{t-1}, x_t] + b_i) \quad \text{(input gate)}
+$$
+$$
+\tilde{c}_t = \tanh(W_c [h_{t-1}, x_t] + b_c) \quad \text{(candidate cell)}
+$$
+$$
+c_t = f_t \odot c_{t-1} + i_t \odot \tilde{c}_t \quad \text{(cell update)}
+$$
+$$
+o_t = \sigma(W_o [h_{t-1}, x_t] + b_o) \quad \text{(output gate)}
+$$
+$$
+h_t = o_t \odot \tanh(c_t) \quad \text{(hidden state)}
+$$
+
+The critical insight: the cell state update $c_t = f_t \odot c_{t-1} + i_t \odot \tilde{c}_t$
+is an **additive** combination. During backpropagation, gradients flow through
+the cell state with only element-wise multiplication — no vanishing product of Jacobians.
+Long-range dependencies can survive.
+
+<CodeBlock lang="python">{`class LSTMClassifier(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size, n_layers=2):
+        super().__init__()
+        self.lstm = nn.LSTM(
+            input_size, hidden_size,
+            num_layers=n_layers,
+            batch_first=True,
+            dropout=0.2         # inter-layer dropout for n_layers > 1
+        )
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        # x: [B, T, input_size]
+        out, (h_n, c_n) = self.lstm(x)
+        # h_n: [n_layers, B, hidden] — use last layer's final hidden state
+        return self.fc(h_n[-1])`}</CodeBlock>
+
+## GRU: a simpler alternative
+
+**Gated Recurrent Unit** (Cho et al., 2014) merges the cell and hidden states
+into one and uses two gates instead of three:
+
+$$
+z_t = \sigma(W_z [h_{t-1}, x_t]) \quad \text{(update gate)}
+$$
+$$
+r_t = \sigma(W_r [h_{t-1}, x_t]) \quad \text{(reset gate)}
+$$
+$$
+\tilde{h}_t = \tanh(W [r_t \odot h_{t-1}, x_t])
+$$
+$$
+h_t = (1 - z_t) \odot h_{t-1} + z_t \odot \tilde{h}_t
+$$
+
+GRU is faster to train (fewer parameters) and performs comparably to LSTM
+on most tasks. PyTorch's `nn.GRU` is a drop-in replacement for `nn.LSTM`.
+
+## Bidirectional RNNs
+
+Standard RNNs process sequences left-to-right, so $h_t$ only sees the past.
+A **bidirectional RNN** runs two RNNs in parallel — one forward, one backward —
+and concatenates their hidden states:
+
+$$
+\vec{h}_t = \overrightarrow{\text{RNN}}(x_t, \vec{h}_{t-1}), \quad
+\overleftarrow{h}_t = \overleftarrow{\text{RNN}}(x_t, \overleftarrow{h}_{t+1})
+$$
+$$
+h_t = [\vec{h}_t; \overleftarrow{h}_t]
+$$
+
+BERT's encoder uses bidirectional attention (equivalent to bidirectional RNNs
+in terms of context access).
+
+<CodeBlock lang="python">{`# Bidirectional LSTM
+self.lstm = nn.LSTM(input_size, hidden_size, bidirectional=True, batch_first=True)
+# Output hidden dim is 2 × hidden_size`}</CodeBlock>
+
+## RNNs vs Transformers
+
+| | RNN / LSTM | Transformer |
+|---|---|---|
+| Sequential processing | Yes — one step at a time | No — full parallel |
+| Long-range memory | Limited (LSTM better) | Excellent (attention) |
+| Training speed | Slow (cannot parallelise) | Fast (full GPU utilisation) |
+| Sequence length | Good for medium ($T < 500$) | Good for long ($T > 10 000$ with tricks) |
+| Parameters | Fewer | Many more |
+| Use today | Audio, time series, small seq | NLP, vision, everything large |
+
+Modern RNN variants (**Mamba**, **RWKV**) use selective state spaces to get
+transformer-level performance with linear memory in sequence length.
+
+## Summary
+
+RNNs introduced the idea of hidden state as a memory that flows through time.
+LSTMs solved the vanishing gradient problem with additive cell state updates and
+learnable gates. While transformers have largely replaced RNNs for NLP, recurrent
+architectures remain important for streaming data, time series, and edge inference
+where memory is limited.
