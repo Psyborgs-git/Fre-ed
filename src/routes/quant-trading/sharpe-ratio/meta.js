@@ -8,5 +8,5 @@ export const meta = {
   updated: '2026-05-01',
   author: 'Fre-ed Team',
   canonical: 'https://fre-ed.vercel.app/quant-trading/sharpe-ratio',
-  stage: 'beginner',
+  stage: 'intermediate',
 };

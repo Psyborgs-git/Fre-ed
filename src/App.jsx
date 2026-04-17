@@ -16,6 +16,10 @@ import CandlestickCharts from './routes/quant-trading/candlestick-charts/index.j
 import MovingAverages from './routes/quant-trading/moving-averages/index.jsx';
 import TrendVsNoise from './routes/quant-trading/trend-vs-noise/index.jsx';
 import PositionSizing from './routes/quant-trading/position-sizing/index.jsx';
+import MeanReversion from './routes/quant-trading/mean-reversion/index.jsx';
+import SharpeRatio from './routes/quant-trading/sharpe-ratio/index.jsx';
+import Backtesting from './routes/quant-trading/backtesting/index.jsx';
+import BollingerBands from './routes/quant-trading/bollinger-bands/index.jsx';
 
 // AI/ML blog articles
 import IntroToLinearAlgebra from './routes/ai-ml/intro-to-linear-algebra/index.jsx';
@@ -52,6 +56,10 @@ export default function App() {
             <Route path="/quant-trading/moving-averages" element={<MovingAverages />} />
             <Route path="/quant-trading/trend-vs-noise" element={<TrendVsNoise />} />
             <Route path="/quant-trading/position-sizing" element={<PositionSizing />} />
+            <Route path="/quant-trading/mean-reversion" element={<MeanReversion />} />
+            <Route path="/quant-trading/sharpe-ratio" element={<SharpeRatio />} />
+            <Route path="/quant-trading/backtesting" element={<Backtesting />} />
+            <Route path="/quant-trading/bollinger-bands" element={<BollingerBands />} />
             <Route path="/intro-to-linear-algebra" element={<IntroToLinearAlgebra />} />
             <Route path="/ai-ml/perceptron" element={<Perceptron />} />
             <Route path="/ai-ml/transformer" element={<Transformer />} />

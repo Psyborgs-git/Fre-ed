@@ -8,5 +8,5 @@ export const meta = {
   updated: '2026-05-01',
   author: 'Fre-ed Team',
   canonical: 'https://fre-ed.vercel.app/quant-trading/mean-reversion',
-  stage: 'intermediate',
+  stage: 'beginner',
 };

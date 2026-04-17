@@ -1,0 +1,141 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Return vs risk
+
+Every investment strategy produces two things: a return and a risk. A 20% annual return sounds great — but not if it required a 50% drawdown to achieve it. **Risk-adjusted metrics** let us compare strategies on equal footing by asking: "how much return did you earn per unit of risk taken?"
+
+The 3D scene plots 25 deterministic strategies as spheres in volatility–return–ratio space. Points coloured green have a high ratio; red points have a low one. The cyan sphere is the best strategy; the dashed line is the capital market line (CML). Switch the metric selector to see how the ranking changes between Sharpe, Sortino, and Calmar.
+
+<Callout type="note">
+Scroll reveals strategies one by one, building up the scatter plot. Switch the metric at the top to see how the color ranking changes — a strategy that looks good on raw Sharpe may rank differently on Sortino if its downside volatility is asymmetric.
+</Callout>
+
+## The Sharpe ratio
+
+The **Sharpe ratio** is the most widely used risk-adjusted return metric in finance, introduced by William Sharpe in 1966:
+
+$$
+\text{Sharpe} = \frac{R_p - R_f}{\sigma_p}
+$$
+
+where $R_p$ is the annualised portfolio return, $R_f$ is the risk-free rate, and $\sigma_p$ is the annualised standard deviation of returns (total volatility, both up and down).
+
+**Annualisation:** daily returns scale by $\sqrt{252}$ for equity markets:
+
+$$
+\text{Sharpe}_{\text{annual}} = \frac{\bar{r}_{\text{daily}} - r_f^{\text{daily}}}{\sigma_{\text{daily}}} \times \sqrt{252}
+$$
+
+A Sharpe above 1.0 is generally considered acceptable; above 2.0 is excellent; above 3.0 is rare and warrants scrutiny for overfitting.
+
+<CodeBlock language="python">{`import pandas as pd
+import numpy as np
+
+def sharpe_ratio(returns: pd.Series, risk_free: float = 0.0,
+                 periods_per_year: int = 252) -> float:
+    """Annualised Sharpe ratio from daily returns."""
+    excess = returns - risk_free / periods_per_year
+    if excess.std() == 0:
+        return 0.0
+    return (excess.mean() / excess.std()) * np.sqrt(periods_per_year)
+
+# Example
+np.random.seed(42)
+returns = pd.Series(np.random.normal(0.0005, 0.012, 252))
+print(f"Sharpe: {sharpe_ratio(returns):.2f}")
+# typical output: ~0.66 for a modest strategy
+`}</CodeBlock>
+
+## Sortino and Calmar ratios
+
+The Sharpe ratio penalises upside volatility equally with downside — but investors only dislike losses. Two alternatives address this:
+
+### Sortino ratio
+
+The **Sortino ratio** replaces $\sigma_p$ with **downside deviation** $\sigma_d$, which only counts returns below a minimum acceptable return (MAR, often zero):
+
+$$
+\text{Sortino} = \frac{R_p - \text{MAR}}{\sigma_d}, \quad \sigma_d = \sqrt{\frac{1}{T}\sum_{t} \min(r_t - \text{MAR},\; 0)^2}
+$$
+
+A strategy with symmetric returns will have a Sortino ≈ Sharpe × √2. A strategy with negative skew (rare large losses) will score *worse* on Sortino.
+
+### Calmar ratio
+
+The **Calmar ratio** uses maximum drawdown as the risk denominator:
+
+$$
+\text{Calmar} = \frac{R_p}{|\text{MaxDrawdown}|}
+$$
+
+It asks: "for each percentage point of maximum loss, how much return did you generate?" The Calmar is particularly relevant for trend-following strategies where drawdowns are infrequent but can be deep.
+
+<CodeBlock language="python">{`def sortino_ratio(returns: pd.Series, mar: float = 0.0,
+                  periods_per_year: int = 252) -> float:
+    """Annualised Sortino ratio."""
+    excess = returns - mar / periods_per_year
+    downside = excess[excess < 0]
+    downside_std = np.sqrt((downside**2).mean())
+    if downside_std == 0:
+        return np.inf
+    return (excess.mean() / downside_std) * np.sqrt(periods_per_year)
+
+def max_drawdown(returns: pd.Series) -> float:
+    """Maximum drawdown as a positive fraction (e.g. 0.25 = 25%)."""
+    wealth = (1 + returns).cumprod()
+    peak = wealth.cummax()
+    dd = (wealth - peak) / peak
+    return abs(dd.min())
+
+def calmar_ratio(returns: pd.Series,
+                 periods_per_year: int = 252) -> float:
+    """Annualised Calmar ratio."""
+    ann_return = (1 + returns.mean()) ** periods_per_year - 1
+    mdd = max_drawdown(returns)
+    if mdd == 0:
+        return np.inf
+    return ann_return / mdd
+
+# Compare metrics
+np.random.seed(0)
+r = pd.Series(np.random.normal(0.0006, 0.011, 500))
+print(f"Sharpe:  {sharpe_ratio(r):.2f}")
+print(f"Sortino: {sortino_ratio(r):.2f}")
+print(f"Calmar:  {calmar_ratio(r):.2f}")
+`}</CodeBlock>
+
+## Comparing strategies
+
+When comparing strategies, use multiple metrics together. No single ratio is sufficient:
+
+| Metric | Strengths | Weaknesses |
+|--------|-----------|------------|
+| **Sharpe** | Universal, easy to compare | Penalises upside vol; assumes normality |
+| **Sortino** | Focuses on downside risk | Sensitive to period choice for MAR |
+| **Calmar** | Drawdown-centric; natural for CTA | Short track records give misleading MDD |
+| **Information ratio** | For active managers vs benchmark | Depends on benchmark choice |
+
+### Information ratio
+
+The **information ratio** (IR) measures alpha relative to tracking error against a benchmark:
+
+$$
+\text{IR} = \frac{R_p - R_{\text{benchmark}}}{\text{TE}}, \quad \text{TE} = \sigma(R_p - R_{\text{benchmark}})
+$$
+
+An IR above 0.5 is considered good for an active manager; above 1.0 is exceptional.
+
+<Callout type="warning">
+**Beware of Sharpe inflation.** Smoothed return series (e.g., monthly NAV from illiquid assets, or strategies with autocorrelated returns) understate true volatility and overstate the Sharpe ratio. Always check return autocorrelation — an AR(1) coefficient above 0.1 is a red flag.
+</Callout>
+
+### Deflated Sharpe ratio
+
+Bailey and López de Prado (2014) introduced the **Deflated Sharpe Ratio** (DSR) to adjust for multiple testing and non-normality:
+
+$$
+\text{DSR} = \Phi\!\left(\frac{(\widehat{SR} - SR^*)\sqrt{T-1}}{\sqrt{1 - \gamma_3\,\widehat{SR} + \tfrac{\gamma_4-1}{4}\,\widehat{SR}^2}}\right)
+$$
+
+where $\Phi$ is the normal CDF, $\gamma_3$ is skewness, $\gamma_4$ is excess kurtosis, and $SR^*$ is the expected maximum Sharpe across all trials. DSR above 0.95 is evidence of a genuine edge.
