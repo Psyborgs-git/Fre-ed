@@ -11,6 +11,12 @@ import About from './routes/about/index.jsx';
 import AiMl from './routes/ai-ml/index.jsx';
 import QuantTrading from './routes/quant-trading/index.jsx';
 
+// Quant Trading lessons
+import CandlestickCharts from './routes/quant-trading/candlestick-charts/index.jsx';
+import MovingAverages from './routes/quant-trading/moving-averages/index.jsx';
+import TrendVsNoise from './routes/quant-trading/trend-vs-noise/index.jsx';
+import PositionSizing from './routes/quant-trading/position-sizing/index.jsx';
+
 // AI/ML blog articles
 import IntroToLinearAlgebra from './routes/ai-ml/intro-to-linear-algebra/index.jsx';
 import Perceptron from './routes/ai-ml/perceptron/index.jsx';
@@ -42,6 +48,10 @@ export default function App() {
             <Route path="/about" element={<About />} />
             <Route path="/ai-ml" element={<AiMl />} />
             <Route path="/quant-trading" element={<QuantTrading />} />
+            <Route path="/quant-trading/candlestick-charts" element={<CandlestickCharts />} />
+            <Route path="/quant-trading/moving-averages" element={<MovingAverages />} />
+            <Route path="/quant-trading/trend-vs-noise" element={<TrendVsNoise />} />
+            <Route path="/quant-trading/position-sizing" element={<PositionSizing />} />
             <Route path="/intro-to-linear-algebra" element={<IntroToLinearAlgebra />} />
             <Route path="/ai-ml/perceptron" element={<Perceptron />} />
             <Route path="/ai-ml/transformer" element={<Transformer />} />

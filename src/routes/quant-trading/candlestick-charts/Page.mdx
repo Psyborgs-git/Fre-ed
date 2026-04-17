@@ -1,0 +1,131 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## What is a candlestick?
+
+A **candlestick** is a single unit of price information that packs four values — Open, High, Low, and Close — into one visual symbol. Developed by Japanese rice traders in the 18th century, candlestick charts remain the most widely used price chart in professional trading.
+
+Each candle tells a story:
+
+| Part | Meaning |
+|------|---------|
+| **Body** (wide rectangle) | Distance between open and close |
+| **Upper wick** (thin line above) | Highest price reached during the period |
+| **Lower wick** (thin line below) | Lowest price reached during the period |
+| **Green / filled body** | Close **above** open — buyers won the period |
+| **Red / hollow body** | Close **below** open — sellers won the period |
+
+The 3D scene above renders 20 candles with volume bars beneath. Scroll to watch them appear left to right, as though a live market is printing bars.
+
+<Callout type="note">
+Scroll through the scene to reveal each candle in sequence. Volume bars reflect trading activity below the price chart — wider bars signal higher conviction moves.
+</Callout>
+
+## OHLC data structure
+
+Every candlestick is four numbers. In Python, OHLC data usually arrives as a DataFrame:
+
+<CodeBlock language="python">{`import pandas as pd
+
+# Typical OHLC DataFrame from a broker or exchange API
+df = pd.DataFrame({
+    'timestamp': pd.date_range('2024-01-01', periods=5, freq='1D'),
+    'open':  [100.0, 106.0, 108.0, 107.0, 104.0],
+    'high':  [108.0, 110.0, 112.0, 111.0, 109.0],
+    'low':   [ 98.0, 104.0, 105.0, 103.0, 101.0],
+    'close': [106.0, 108.0, 107.0, 104.0, 108.0],
+    'volume':[42000, 55000, 38000, 60000, 47000],
+})
+
+# Classify each candle
+df['bullish'] = df['close'] > df['open']
+df['body_size'] = (df['close'] - df['open']).abs()
+df['upper_wick'] = df['high'] - df[['open', 'close']].max(axis=1)
+df['lower_wick'] = df[['open', 'close']].min(axis=1) - df['low']
+
+print(df[['timestamp', 'open', 'high', 'low', 'close', 'bullish', 'body_size']])
+`}</CodeBlock>
+
+The **body size** tells you the conviction of the move; the **wick length** tells you how far price explored before reversing.
+
+## Body and wicks — the anatomy
+
+$$
+\text{Body} = |C - O|
+$$
+
+$$
+\text{Upper wick} = H - \max(O, C)
+$$
+
+$$
+\text{Lower wick} = \min(O, C) - L
+$$
+
+A **long upper wick** on a green candle means buyers pushed price high, but sellers stepped in and pushed it back before the close — a sign of overhead resistance. A **long lower wick** on a red candle shows sellers tried to push price down but failed — demand absorbed the selling.
+
+<Callout type="tip">
+**Wick-to-body ratio** is a quick way to measure indecision. A ratio above 2× often signals a potential reversal — the market probed a level and rejected it forcefully.
+</Callout>
+
+## Bullish patterns
+
+| Pattern | Description | Signal |
+|---------|-------------|--------|
+| **Hammer** | Small body, long lower wick, at support | Bullish reversal |
+| **Bullish Engulfing** | Large green candle fully engulfs prior red candle | Strong bullish reversal |
+| **Morning Star** | Red candle → small indecision → large green candle | Bullish reversal after downtrend |
+| **Marubozu** | Full body, no wicks | Overwhelming buyer control |
+
+<CodeBlock language="python">{`def is_hammer(row, wick_ratio=2.0):
+    """Identify hammer candles: small body, long lower wick."""
+    body = abs(row['close'] - row['open'])
+    lower_wick = min(row['open'], row['close']) - row['low']
+    upper_wick = row['high'] - max(row['open'], row['close'])
+    if body == 0:
+        return False
+    return lower_wick >= wick_ratio * body and upper_wick <= 0.2 * body
+
+def is_bullish_engulfing(prev, curr):
+    """Prior candle is bearish, current candle is bullish and larger."""
+    prev_bearish = prev['close'] < prev['open']
+    curr_bullish = curr['close'] > curr['open']
+    engulfs = curr['open'] <= prev['close'] and curr['close'] >= prev['open']
+    return prev_bearish and curr_bullish and engulfs
+
+df['hammer'] = df.apply(is_hammer, axis=1)
+# Engulfing needs pairs
+df['bullish_engulf'] = [
+    False if i == 0 else is_bullish_engulfing(df.iloc[i-1], df.iloc[i])
+    for i in range(len(df))
+]
+`}</CodeBlock>
+
+## Bearish patterns
+
+| Pattern | Description | Signal |
+|---------|-------------|--------|
+| **Shooting Star** | Small body, long upper wick, at resistance | Bearish reversal |
+| **Bearish Engulfing** | Large red candle fully engulfs prior green candle | Strong bearish reversal |
+| **Evening Star** | Green candle → small indecision → large red candle | Bearish reversal after uptrend |
+| **Dark Cloud Cover** | Red candle opens above prior close, closes below midpoint | Bearish momentum shift |
+
+<Callout type="warning">
+Candlestick patterns work best when combined with **volume confirmation** and **context** (e.g., is the hammer at a key support level?). A hammer in the middle of a range is far less meaningful than one at a 52-week low.
+</Callout>
+
+## How market makers read candles
+
+Professional traders and market makers watch candles for **order flow imbalance**. A large green candle with high volume signals aggressive buyers; a large red candle with high volume signals aggressive sellers. Small bodies with long wicks at key levels often indicate **stop hunts** — brief excursions beyond support or resistance designed to trigger retail stop-loss orders before reversing.
+
+The volume bar beneath each candle is equally important:
+
+$$
+\text{Dollar Volume} = \frac{O + H + L + C}{4} \times V
+$$
+
+High volume on a reversal candle confirms the move is institutionally backed. Low volume on a breakout candle is a red flag — the move may lack follow-through.
+
+<Callout type="note">
+In the 3D scene, green candles represent bullish (close ≥ open) bars and red candles represent bearish bars. Volume bars share the same color to reinforce the directional story. Scroll to watch the full 20-candle sequence build.
+</Callout>
