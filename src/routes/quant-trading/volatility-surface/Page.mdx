@@ -1,0 +1,180 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Implied volatility
+
+When market participants price options, they are implicitly forecasting future volatility. **Implied volatility (IV)** is the volatility value $\sigma$ that, plugged into the Black-Scholes formula, reproduces the market price of an option:
+
+$$
+C_{\text{market}} = \text{BS}(S, K, T, r, \sigma_{\text{IV}})
+$$
+
+Since Black-Scholes has no closed-form inverse for $\sigma$, IV is found numerically (Newton-Raphson on the vega):
+
+$$
+\sigma_{n+1} = \sigma_n - \frac{C_{\text{BS}}(\sigma_n) - C_{\text{market}}}{\mathcal{V}(\sigma_n)}
+$$
+
+where $\mathcal{V} = \partial C / \partial \sigma$ is the **vega**.
+
+**Realized volatility** is what actually happened; **implied volatility** is what options traders expect. The gap between them — the **variance risk premium** — is persistently positive: options are on average overpriced, selling options is a long-run profitable carry trade (with large tail risk).
+
+In the scene, scroll to watch the 10×10 point-cloud surface rise from flat to its true implied-vol shape. Switch between **Smile**, **Skew**, and **Flat** to compare the three canonical surface shapes. Colour encodes vol height: violet = low, cyan = mid, amber = high.
+
+<CodeBlock language="python">{`import numpy as np
+from scipy.stats import norm
+from scipy.optimize import brentq
+
+def black_scholes(S, K, T, r, sigma, option='call'):
+    """Black-Scholes option price."""
+    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+    if option == 'call':
+        return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+    return K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+
+def implied_vol(market_price, S, K, T, r, option='call',
+                low=1e-6, high=5.0) -> float:
+    """Find implied vol via Brent's method."""
+    try:
+        return brentq(
+            lambda sigma: black_scholes(S, K, T, r, sigma, option) - market_price,
+            low, high, xtol=1e-8, maxiter=500,
+        )
+    except ValueError:
+        return float('nan')
+
+# Example: single IV lookup
+S, K, T, r = 100, 100, 0.5, 0.05
+market_call = 6.80
+iv = implied_vol(market_call, S, K, T, r)
+print(f"Implied volatility: {iv:.4f}  ({iv*100:.2f}%)")
+`}</CodeBlock>
+
+## The volatility smile
+
+Under Black-Scholes, IV should be constant across all strikes — a flat surface. Reality is very different. Plotting IV against strike (for a fixed expiry) produces the **volatility smile** or **skew**:
+
+- **Smile**: IV is higher at far OTM puts *and* calls than at the money. Common in FX and index options post-1987.
+- **Skew (smirk)**: IV rises sharply for low strikes (puts) but only mildly for high strikes (calls). The most common equity index shape — reflecting demand for downside protection.
+- **Flat**: ATM vol roughly constant across strikes (rare in equity vol; common approximation for very short-dated options in low-vol regimes).
+
+The **moneyness** parameter $m = \ln(K/S)$ is the natural coordinate:
+
+$$
+\sigma_{\text{IV}}(m, T) = \sigma_{\text{ATM}}(T) + \text{skew}(T) \cdot m + \text{curvature}(T) \cdot m^2
+$$
+
+This quadratic approximation is the **SABR model's** small-vol expansion.
+
+<Callout type="note">
+The scene formula uses exactly this expansion. **Smile** adds only positive curvature ($+0.15 m^2$); **Skew** adds both a negative slope ($-0.10 m$) and curvature ($+0.08 m^2$); **Flat** returns ATM vol only.
+</Callout>
+
+<CodeBlock language="python">{`import numpy as np
+import pandas as pd
+
+def vol_surface_slice(S: float, T: float, r: float,
+                      option_chain: pd.DataFrame,
+                      option_type: str = 'call') -> pd.Series:
+    """
+    Compute IV for each row in option_chain (columns: strike, market_price).
+    Returns Series of implied vols indexed by strike.
+    """
+    ivs = {}
+    for _, row in option_chain.iterrows():
+        K = row['strike']
+        price = row['market_price']
+        iv = implied_vol(price, S, K, T, r, option=option_type)
+        ivs[K] = iv
+    return pd.Series(ivs, name=f'IV (T={T:.2f})')
+
+def sabr_vol(F, K, T, alpha, beta, rho, nu):
+    """SABR implied vol approximation (Hagan 2002), beta fixed at 1 (log-normal)."""
+    if abs(F - K) < 1e-10:
+        # ATM formula
+        return alpha / (F ** (1 - beta)) * (
+            1 + ((1 - beta)**2 / 24 * alpha**2 / F**(2*(1-beta))
+                 + 0.25 * rho * beta * nu * alpha / F**(1-beta)
+                 + (2 - 3*rho**2) / 24 * nu**2) * T
+        )
+    z  = nu / alpha * (F * K)**((1 - beta) / 2) * np.log(F / K)
+    x  = np.log((np.sqrt(1 - 2*rho*z + z**2) + z - rho) / (1 - rho))
+    A  = alpha / ((F*K)**((1-beta)/2) * (1 + (1-beta)**2/24 * np.log(F/K)**2
+                                          + (1-beta)**4/1920 * np.log(F/K)**4))
+    B  = z / x if abs(x) > 1e-10 else 1.0
+    C  = (1 + ((1-beta)**2/24 * alpha**2 / (F*K)**(1-beta)
+               + 0.25*rho*beta*nu*alpha / (F*K)**((1-beta)/2)
+               + (2-3*rho**2)/24 * nu**2) * T)
+    return A * B * C
+`}</CodeBlock>
+
+## Volatility term structure
+
+The **term structure** of volatility is the ATM IV across different expiries at a fixed strike. Several empirical patterns are common:
+
+- **Normal (upward-sloping)**: short-dated vol is low, long-dated vol is higher. Markets calm, uncertainty increases over time.
+- **Inverted**: short-dated vol exceeds long-dated vol. Markets in stress — events feared soon, expectation of mean reversion.
+- **Hump**: peak at an intermediate expiry (e.g., upcoming FOMC or earnings).
+
+The Gatheral SVI (Stochastic Volatility Inspired) parameterisation models the full surface:
+
+$$
+w(k) = a + b\left[\rho(k - m) + \sqrt{(k-m)^2 + \sigma^2}\right]
+$$
+
+where $k = \ln(K/F)$, $w = \sigma_{\text{IV}}^2 \cdot T$ is total variance, and $(a, b, \rho, m, \sigma)$ are free parameters.
+
+**Calendar spreads** profit from differences in term structure:
+- **Buy near**, **sell far** (negative theta, long vega short term): profits if near-term vol spikes.
+- **Sell near**, **buy far** (positive theta): profits from carry when term structure is steep and stable.
+
+<CodeBlock language="python">{`import numpy as np
+from scipy.optimize import minimize
+
+def svi_total_variance(k, a, b, rho, m, sigma_svi):
+    """SVI total implied variance w = sigma_IV^2 * T."""
+    return a + b * (rho * (k - m) + np.sqrt((k - m)**2 + sigma_svi**2))
+
+def fit_svi_slice(log_strikes: np.ndarray,
+                  total_variances: np.ndarray) -> dict:
+    """Fit SVI parameters to a single expiry slice."""
+    def objective(params):
+        a, b, rho, m, s = params
+        if b <= 0 or s <= 0 or abs(rho) >= 1:
+            return 1e9
+        pred = svi_total_variance(log_strikes, a, b, rho, m, s)
+        return np.mean((pred - total_variances)**2)
+
+    result = minimize(
+        objective,
+        x0=[0.04, 0.1, -0.3, 0.0, 0.1],
+        method='Nelder-Mead',
+        options={'maxiter': 5000, 'xatol': 1e-8, 'fatol': 1e-10},
+    )
+    a, b, rho, m, s = result.x
+    return {'a': a, 'b': b, 'rho': rho, 'm': m, 'sigma': s,
+            'converged': result.success}
+`}</CodeBlock>
+
+## Surface arbitrage
+
+A volatility surface must satisfy **no-arbitrage conditions** to avoid free money:
+
+1. **Calendar spread arbitrage**: total variance $w(k, T)$ must be non-decreasing in $T$ at each fixed $k$. Violated if near-dated total variance exceeds far-dated.
+
+$$
+\frac{\partial w(k, T)}{\partial T} \geq 0 \quad \forall\, k
+$$
+
+2. **Butterfly arbitrage**: the local volatility (extracted via Dupire's formula) must be non-negative:
+
+$$
+\sigma_{\text{local}}^2(k, T) = \frac{\partial w / \partial T}{1 - \frac{k}{w} \frac{\partial w}{\partial k} + \frac{1}{4}\left(-\frac{1}{4} - \frac{1}{w} + \frac{k^2}{w^2}\right)\left(\frac{\partial w}{\partial k}\right)^2 + \frac{1}{2}\frac{\partial^2 w}{\partial k^2}} \geq 0
+$$
+
+3. **Put-call parity**: the no-arbitrage relationship $C - P = S - K e^{-rT}$ pins call and put IVs together.
+
+<Callout type="warning">
+Fitting parameterised surfaces (SVI, SABR) does not guarantee no-arbitrage. Always check calendar spread and butterfly conditions after fitting. In practice, arbitrage violations appear at the wings of the surface where market data is sparse and bid-ask spreads are wide.
+</Callout>
