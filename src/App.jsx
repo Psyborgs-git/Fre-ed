@@ -11,6 +11,20 @@ import About from './routes/about/index.jsx';
 import AiMl from './routes/ai-ml/index.jsx';
 import QuantTrading from './routes/quant-trading/index.jsx';
 
+// Quant Trading lessons
+import CandlestickCharts from './routes/quant-trading/candlestick-charts/index.jsx';
+import MovingAverages from './routes/quant-trading/moving-averages/index.jsx';
+import TrendVsNoise from './routes/quant-trading/trend-vs-noise/index.jsx';
+import PositionSizing from './routes/quant-trading/position-sizing/index.jsx';
+import MeanReversion from './routes/quant-trading/mean-reversion/index.jsx';
+import SharpeRatio from './routes/quant-trading/sharpe-ratio/index.jsx';
+import Backtesting from './routes/quant-trading/backtesting/index.jsx';
+import BollingerBands from './routes/quant-trading/bollinger-bands/index.jsx';
+import CorrelationHeatmap from './routes/quant-trading/correlation-heatmap/index.jsx';
+import RegimeDetection from './routes/quant-trading/regime-detection/index.jsx';
+import VolatilitySurface from './routes/quant-trading/volatility-surface/index.jsx';
+import EfficientFrontier from './routes/quant-trading/efficient-frontier/index.jsx';
+
 // AI/ML blog articles
 import IntroToLinearAlgebra from './routes/ai-ml/intro-to-linear-algebra/index.jsx';
 import Perceptron from './routes/ai-ml/perceptron/index.jsx';
@@ -42,6 +56,18 @@ export default function App() {
             <Route path="/about" element={<About />} />
             <Route path="/ai-ml" element={<AiMl />} />
             <Route path="/quant-trading" element={<QuantTrading />} />
+            <Route path="/quant-trading/candlestick-charts" element={<CandlestickCharts />} />
+            <Route path="/quant-trading/moving-averages" element={<MovingAverages />} />
+            <Route path="/quant-trading/trend-vs-noise" element={<TrendVsNoise />} />
+            <Route path="/quant-trading/position-sizing" element={<PositionSizing />} />
+            <Route path="/quant-trading/mean-reversion" element={<MeanReversion />} />
+            <Route path="/quant-trading/sharpe-ratio" element={<SharpeRatio />} />
+            <Route path="/quant-trading/backtesting" element={<Backtesting />} />
+            <Route path="/quant-trading/bollinger-bands" element={<BollingerBands />} />
+            <Route path="/quant-trading/correlation-heatmap" element={<CorrelationHeatmap />} />
+            <Route path="/quant-trading/regime-detection" element={<RegimeDetection />} />
+            <Route path="/quant-trading/volatility-surface" element={<VolatilitySurface />} />
+            <Route path="/quant-trading/efficient-frontier" element={<EfficientFrontier />} />
             <Route path="/intro-to-linear-algebra" element={<IntroToLinearAlgebra />} />
             <Route path="/ai-ml/perceptron" element={<Perceptron />} />
             <Route path="/ai-ml/transformer" element={<Transformer />} />
@@ -66,3 +92,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+

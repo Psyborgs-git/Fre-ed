@@ -1,0 +1,172 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Band construction
+
+A **Bollinger Band** is a volatility envelope plotted around a simple moving average. John Bollinger introduced the concept in the 1980s as a way to define "high" and "low" relative to recent price history — not in absolute terms, but in terms of the current *volatility regime*.
+
+The scene shows the price line (cyan) between amber upper and lower bands. A violet centre line is the SMA. Red spheres appear when price touches the upper band; green spheres at the lower band. Adjust Period to change the SMA window and StdDev to widen or narrow the envelope.
+
+The three components are:
+
+$$
+\text{SMA}_n(t) = \frac{1}{n} \sum_{k=0}^{n-1} P_{t-k}
+$$
+
+$$
+\sigma_n(t) = \sqrt{\frac{1}{n} \sum_{k=0}^{n-1} \bigl(P_{t-k} - \text{SMA}_n(t)\bigr)^2}
+$$
+
+$$
+\text{Upper}_t = \text{SMA}_n(t) + m \cdot \sigma_n(t), \quad \text{Lower}_t = \text{SMA}_n(t) - m \cdot \sigma_n(t)
+$$
+
+where $n$ is the period (default 20) and $m$ is the multiplier (default 2.0). Bollinger himself found that roughly **90% of price action occurs within the bands** at the default settings.
+
+<CodeBlock language="python">{`import pandas as pd
+import numpy as np
+
+def bollinger_bands(prices: pd.Series,
+                    period: int = 20,
+                    std_dev: float = 2.0) -> pd.DataFrame:
+    """Compute Bollinger Bands. Returns DataFrame with sma, upper, lower."""
+    sma   = prices.rolling(period).mean()
+    sigma = prices.rolling(period).std(ddof=0)  # population std
+    upper = sma + std_dev * sigma
+    lower = sma - std_dev * sigma
+    return pd.DataFrame({"sma": sma, "upper": upper, "lower": lower,
+                         "bandwidth": (upper - lower) / sma,
+                         "pct_b": (prices - lower) / (upper - lower)})
+
+# Example
+import yfinance as yf
+prices = yf.download("SPY", start="2023-01-01", end="2024-01-01")["Close"]
+bands  = bollinger_bands(prices, period=20, std_dev=2.0)
+print(bands.tail())
+`}</CodeBlock>
+
+## Squeeze and expansion
+
+The most powerful Bollinger Band signal is not the touch of a band — it is the *width* of the bands itself. **Bandwidth** is:
+
+$$
+\text{BW}_t = \frac{\text{Upper}_t - \text{Lower}_t}{\text{SMA}_t}
+$$
+
+When bandwidth falls to a multi-year low, it signals a **squeeze**: volatility has contracted and a large directional move is imminent (though direction is unknown). When bandwidth expands sharply, the move has begun.
+
+The **%B indicator** measures where price sits within the bands:
+
+$$
+\%B_t = \frac{P_t - \text{Lower}_t}{\text{Upper}_t - \text{Lower}_t}
+$$
+
+- $\%B = 1.0$: price is exactly at the upper band
+- $\%B = 0.5$: price is at the SMA
+- $\%B = 0.0$: price is exactly at the lower band
+- $\%B > 1.0$ or $\%B < 0.0$: price has broken outside the band
+
+<Callout type="note">
+In the scene, the squeeze period is visible between indices 20–30: the amber bands narrow visibly. Lower StdDev multiplier on the slider reveals the squeeze effect more dramatically.
+</Callout>
+
+### Bollinger Band Width indicator
+
+<CodeBlock language="python">{`def detect_squeeze(bands: pd.DataFrame,
+                   lookback: int = 120,
+                   threshold_pct: float = 0.05) -> pd.Series:
+    """Return True at bars where bandwidth is in the bottom threshold_pct
+    of its lookback window — i.e., a Bollinger squeeze."""
+    bw_min = bands["bandwidth"].rolling(lookback).min()
+    bw_max = bands["bandwidth"].rolling(lookback).max()
+    bw_range = bw_max - bw_min
+    # normalise bandwidth within its lookback range
+    bw_rank = (bands["bandwidth"] - bw_min) / bw_range
+    return bw_rank < threshold_pct
+
+# Example
+squeeze = detect_squeeze(bands)
+print("Squeeze bars:", squeeze.sum())
+`}</CodeBlock>
+
+## Mean-reversion signals
+
+The classic **mean-reversion** interpretation of Bollinger Bands assumes the price is range-bound:
+
+- **Buy** when price closes *below* the lower band (oversold).
+- **Sell short** when price closes *above* the upper band (overbought).
+- **Exit** when price returns to the SMA.
+
+This works well in **low-trending, high-mean-reverting** conditions (e.g., equity indices during low-volatility sideways regimes).
+
+$$
+\text{Signal}^{\text{MR}}_t = \begin{cases}
++1 & P_t \leq \text{Lower}_t \\
+-1 & P_t \geq \text{Upper}_t \\
+\phantom{+}0 & |{}\%B_t - 0.5| < 0.1 \text{ (exit zone)}
+\end{cases}
+$$
+
+<Callout type="warning">
+Never trade mean-reversion signals in a strong trend without a trend filter. Repeatedly fading an uptrending breakout is one of the most reliable ways to blow up an account. Add a 200-day SMA filter: only take long mean-reversion signals when price is above the 200-day SMA.
+</Callout>
+
+## Breakout signals
+
+During and after a squeeze, Bollinger Bands switch from a **mean-reversion** tool to a **breakout** tool:
+
+- **Breakout long**: first close *above* the upper band after a prolonged squeeze — the price is breaking out of its volatility compression.
+- **Breakout short**: first close *below* the lower band after a squeeze.
+
+The key heuristic: **trend-follow the first touch of the band after a squeeze; mean-revert the repeated touches during a range**.
+
+<CodeBlock language="python">{`def bollinger_signals(prices: pd.Series,
+                      period: int = 20,
+                      std_dev: float = 2.0,
+                      squeeze_lookback: int = 60) -> pd.DataFrame:
+    """
+    Combine squeeze detection with band-touch signals.
+    Returns DataFrame with columns: signal, in_squeeze, pct_b.
+    """
+    bands   = bollinger_bands(prices, period, std_dev)
+    squeeze = detect_squeeze(bands, lookback=squeeze_lookback)
+
+    signal = pd.Series(0, index=prices.index)
+    for i in range(1, len(prices)):
+        pct_b = bands["pct_b"].iloc[i]
+        was_squeezed = squeeze.iloc[i - 1]
+
+        if was_squeezed:
+            # Breakout mode after squeeze
+            if pct_b > 1.0:
+                signal.iloc[i] = 1    # breakout long
+            elif pct_b < 0.0:
+                signal.iloc[i] = -1   # breakout short
+        else:
+            # Mean-reversion mode during range
+            if pct_b < 0.05:
+                signal.iloc[i] = 1    # oversold: long
+            elif pct_b > 0.95:
+                signal.iloc[i] = -1   # overbought: short
+
+    return pd.DataFrame({
+        "signal":     signal,
+        "in_squeeze": squeeze,
+        "pct_b":      bands["pct_b"],
+        "bandwidth":  bands["bandwidth"],
+    })
+
+# Backtest-ready signal generation
+signals = bollinger_signals(prices, period=20, std_dev=2.0)
+print(signals[signals["signal"] != 0].head(10))
+`}</CodeBlock>
+
+### Volatility-based position sizing
+
+Because band width directly measures volatility, it provides a natural **position-sizing input**:
+
+$$
+\text{Shares}_t = \frac{\text{Risk budget}}{\text{BW}_t \cdot P_t}
+$$
+
+When the bands are wide (high volatility), position size shrinks automatically. When the bands are narrow (low volatility pre-squeeze), the full position is deployed. This is a form of **volatility targeting** — a technique also used in risk-parity and trend-following strategies.

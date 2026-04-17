@@ -1,0 +1,124 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Smoothing price series
+
+Raw price series are noisy. A tick-by-tick chart oscillates wildly, making it hard to judge the underlying direction. **Moving averages** reduce this noise by averaging recent prices — trading some responsiveness for clarity.
+
+The 3D scene shows 40 price points (amber line), an SMA overlay (cyan), and an EMA overlay (violet). Glowing spheres mark **crossover signals** — moments where the two averages switch relative position. Use the period slider to change the look-back window and watch how the averages lag and interact.
+
+<Callout type="note">
+Drag the Period slider to see how a longer window produces a smoother, more lagging average while a shorter window tracks price more closely.
+</Callout>
+
+## Simple Moving Average (SMA)
+
+The SMA is an equal-weighted mean of the last $n$ prices:
+
+$$
+\text{SMA}_n(t) = \frac{1}{n} \sum_{k=0}^{n-1} P_{t-k} = \frac{P_t + P_{t-1} + \cdots + P_{t-n+1}}{n}
+$$
+
+Each observation in the window has weight $\tfrac{1}{n}$. The oldest observation drops off abruptly when it leaves the window — this can cause the SMA to "jump" on large moves that enter or exit the window.
+
+<CodeBlock language="python">{`import pandas as pd
+import numpy as np
+
+# Simple Moving Average
+def sma(prices: pd.Series, period: int) -> pd.Series:
+    return prices.rolling(window=period).mean()
+
+# Example
+prices = pd.Series([100, 106, 108, 107, 104, 108, 112, 111, 113, 116])
+print(sma(prices, period=5))
+# 0      NaN
+# 1      NaN
+# 2      NaN
+# 3      NaN
+# 4    105.0
+# 5    106.6
+# ...
+`}</CodeBlock>
+
+## Exponential Moving Average (EMA)
+
+The EMA gives **exponentially more weight to recent prices**, using a smoothing factor $\alpha = \tfrac{2}{n+1}$:
+
+$$
+\text{EMA}_t = \alpha \cdot P_t + (1 - \alpha) \cdot \text{EMA}_{t-1}
+$$
+
+Expanding recursively:
+
+$$
+\text{EMA}_t = \alpha \sum_{k=0}^{\infty} (1-\alpha)^k P_{t-k}
+$$
+
+The weight on the most recent price is $\alpha$; on the price two periods ago, $\alpha(1-\alpha)$; and so on — an exponentially decaying memory.
+
+<CodeBlock language="python">{`def ema(prices: pd.Series, period: int) -> pd.Series:
+    """Exponential moving average with span=period."""
+    return prices.ewm(span=period, adjust=False).mean()
+
+# Compare lag: EMA reacts faster than SMA on the same period
+prices = pd.Series([100, 106, 108, 107, 104, 108, 112, 111, 113, 116])
+period = 5
+df = pd.DataFrame({
+    'price': prices,
+    'sma':   sma(prices, period),
+    'ema':   ema(prices, period),
+})
+print(df)
+`}</CodeBlock>
+
+## Crossover signals
+
+A **golden cross** occurs when a shorter-period MA crosses above a longer-period MA — a classic bullish signal. A **death cross** is the opposite.
+
+In the scene, green spheres mark golden crosses (EMA crosses above SMA) and red spheres mark death crosses (EMA crosses below SMA):
+
+$$
+\text{Signal} = \begin{cases}
++1 \text{ (buy)}  & \text{if } \text{EMA}_{t} > \text{SMA}_{t} \text{ and } \text{EMA}_{t-1} \leq \text{SMA}_{t-1} \\
+-1 \text{ (sell)} & \text{if } \text{EMA}_{t} < \text{SMA}_{t} \text{ and } \text{EMA}_{t-1} \geq \text{SMA}_{t-1}
+\end{cases}
+$$
+
+<CodeBlock language="python">{`def crossover_signals(prices: pd.Series, fast: int = 10, slow: int = 20):
+    """Return +1 for golden cross, -1 for death cross, 0 otherwise."""
+    fast_ma = ema(prices, fast)
+    slow_ma = sma(prices, slow)
+    diff = fast_ma - slow_ma
+    signal = np.where(
+        (diff > 0) & (diff.shift(1) <= 0),  1,   # golden cross
+        np.where(
+        (diff < 0) & (diff.shift(1) >= 0), -1,   # death cross
+        0
+    ))
+    return pd.Series(signal, index=prices.index)
+`}</CodeBlock>
+
+## The lag problem
+
+Both SMA and EMA are **lagging indicators** — they can only confirm a trend after it has already started. The longer the period, the smoother but also the more lagging:
+
+| Period | Responsiveness | Noise reduction | Lag |
+|--------|---------------|-----------------|-----|
+| 5      | High          | Low             | Low |
+| 20     | Medium        | Medium          | Medium |
+| 50     | Low           | High            | High |
+
+<Callout type="warning">
+**Over-fitting warning:** It's easy to find a period that "worked" historically. Always validate crossover strategies on out-of-sample data and account for transaction costs — frequent signals on short periods can be expensive to trade.
+</Callout>
+
+## When to use SMA vs EMA
+
+| | SMA | EMA |
+|-|-----|-----|
+| **Use when** | You want equal weighting across a well-defined window | You want recent data to carry more weight |
+| **Best for** | Support/resistance levels, longer-term trend | Fast-reacting signals, short-term momentum |
+| **Sensitivity** | Lower — reacts slowly | Higher — reacts quickly |
+| **Common periods** | 50, 100, 200 (daily) | 9, 12, 26 (daily/hourly) |
+
+The 200-day SMA is one of the most watched levels in equity markets — price above it is broadly considered bullish, below it bearish.

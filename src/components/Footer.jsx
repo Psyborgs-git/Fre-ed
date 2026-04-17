@@ -21,6 +21,7 @@ export default function Footer() {
             {[
               { to: '/blog', label: 'Blog' },
               { to: '/ai-ml', label: 'AI/ML' },
+              { to: '/quant-trading', label: 'Quant' },
               { to: '/about', label: 'About' },
             ].map(({ to, label }) => (
               <li key={to}>

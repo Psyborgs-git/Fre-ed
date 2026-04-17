@@ -1,0 +1,167 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## What is correlation?
+
+**Correlation** measures the linear relationship between two return series. The **Pearson correlation coefficient** between assets $i$ and $j$ is:
+
+$$
+\rho_{ij} = \frac{\text{Cov}(r_i, r_j)}{\sigma_i \, \sigma_j} = \frac{\sum_{t=1}^{T}(r_{i,t} - \bar r_i)(r_{j,t} - \bar r_j)}{\sqrt{\sum(r_{i,t}-\bar r_i)^2} \cdot \sqrt{\sum(r_{j,t}-\bar r_j)^2}}
+$$
+
+The result lives in $[-1, +1]$. The heatmap in the scene encodes this range: deep **green** for $+1$, **white** for $0$, and deep **red** for $-1$. Scroll to watch values animate from zero to their true levels.
+
+Switch the **Assets** control to compare three correlation regimes:
+
+- **Equities**: all positive, high. Stock indices from similar economies tend to move together.
+- **Multi-asset**: bonds negatively correlated with equities, commodities weakly correlated — the textbook diversification case.
+- **Crypto**: very high positive correlations across the board; the asset class behaves as one risk factor.
+
+<Callout type="note">
+The matrix is always symmetric ($\rho_{ij} = \rho_{ji}$) and the diagonal is always 1 (every asset is perfectly correlated with itself). In the scene, the diagonal is locked to green before scroll begins.
+</Callout>
+
+<CodeBlock language="python">{`import numpy as np
+import pandas as pd
+
+def correlation_matrix(returns: pd.DataFrame) -> pd.DataFrame:
+    """Compute pairwise Pearson correlation of log-returns."""
+    log_returns = np.log(returns / returns.shift(1)).dropna()
+    return log_returns.corr()
+
+# Example with synthetic 5-asset data
+np.random.seed(42)
+n = 252
+# Factor model: 1 common factor + idiosyncratic noise
+factor = np.random.randn(n)
+assets = pd.DataFrame({
+    f"Asset{i+1}": 0.6 * factor + 0.8 * np.random.randn(n)
+    for i in range(5)
+}, index=pd.date_range("2023-01-01", periods=n, freq="B"))
+
+corr = correlation_matrix(assets)
+print(corr.round(2))
+`}</CodeBlock>
+
+## The covariance matrix
+
+Correlation is the *normalised* form of the **covariance matrix** $\Sigma$. Covariance carries both direction and magnitude:
+
+$$
+\Sigma_{ij} = \text{Cov}(r_i, r_j) = \rho_{ij} \cdot \sigma_i \cdot \sigma_j
+$$
+
+The covariance matrix is the central object in portfolio optimisation. Portfolio variance is:
+
+$$
+\sigma_p^2 = \mathbf{w}^\top \Sigma \, \mathbf{w} = \sum_i \sum_j w_i w_j \Sigma_{ij}
+$$
+
+where $\mathbf{w}$ is the vector of portfolio weights. Low or negative off-diagonal terms shrink portfolio variance below the weighted average of individual variances — this is the mathematical definition of **diversification benefit**.
+
+**Shrinkage** is essential in practice. The sample covariance matrix from $T$ observations is noisy when the number of assets $N$ is large relative to $T$. The Ledoit-Wolf shrinkage estimator blends the sample matrix with a structured target:
+
+$$
+\hat \Sigma_{\text{shrink}} = (1 - \alpha)\,\hat\Sigma_{\text{sample}} + \alpha \,\hat\Sigma_{\text{target}}
+$$
+
+<CodeBlock language="python">{`from sklearn.covariance import LedoitWolf
+import numpy as np
+import pandas as pd
+
+def shrunk_covariance(returns: pd.DataFrame) -> np.ndarray:
+    """Ledoit-Wolf shrinkage estimate of the covariance matrix."""
+    log_ret = np.log(returns / returns.shift(1)).dropna().values
+    lw = LedoitWolf()
+    lw.fit(log_ret)
+    # Annualise (assuming daily returns)
+    return lw.covariance_ * 252
+
+# Convert to correlation
+def cov_to_corr(cov: np.ndarray) -> np.ndarray:
+    std = np.sqrt(np.diag(cov))
+    return cov / np.outer(std, std)
+
+cov = shrunk_covariance(assets)
+corr = cov_to_corr(cov)
+print("Shrinkage coefficient:", LedoitWolf().fit(np.log(assets / assets.shift(1)).dropna()).shrinkage_)
+`}</CodeBlock>
+
+## Portfolio diversification
+
+The diversification benefit of combining $N$ assets grows *as long as correlations are not all +1*. For an equally weighted portfolio of $N$ assets each with volatility $\sigma$ and pairwise correlation $\bar\rho$:
+
+$$
+\sigma_p = \sigma \sqrt{\frac{1}{N} + \frac{N-1}{N} \bar\rho} \xrightarrow{N \to \infty} \sigma \sqrt{\bar\rho}
+$$
+
+The floor $\sigma\sqrt{\bar\rho}$ is the **systematic risk** — undiversifiable even with infinitely many assets. Only $\bar\rho = 0$ eliminates all risk through diversification.
+
+**Effective N** quantifies how many independent bets a portfolio actually contains:
+
+$$
+N_{\text{eff}} = \frac{1}{\sum_i w_i^2} \quad \text{(equal risk contribution approximation)}
+$$
+
+<Callout type="warning">
+High cross-asset correlations in the **crypto** matrix mean $N_{\text{eff}}$ for a diversified crypto portfolio is close to 1 — you essentially own one risk factor regardless of how many tokens you hold. True diversification requires uncorrelated exposures.
+</Callout>
+
+## Correlation breakdown in crises
+
+The greatest danger of correlation-based diversification is that correlations are **not stable through time**. During market stress events, correlations spike toward $+1$ across nearly all risky assets — exactly when diversification is most needed.
+
+This phenomenon is sometimes called the **correlation breakdown** or **crisis alpha problem**:
+
+$$
+\rho_{ij}^{\text{crisis}} \gg \rho_{ij}^{\text{normal}} \quad \text{for most } i \neq j
+$$
+
+The bond–equity correlation (negative in multi-asset matrix) also regime-shifts: in deflationary crises bonds rally while equities fall (helpful), but in inflationary crises both fall together (the 2022 problem).
+
+**Pearson vs. rank (Spearman) correlation**: Pearson captures linear relationships and is sensitive to outliers. Spearman rank correlation is more robust to fat tails:
+
+$$
+\rho_S = 1 - \frac{6 \sum d_i^2}{n(n^2 - 1)}, \quad d_i = \text{rank}(r_i) - \text{rank}(r_j)
+$$
+
+<CodeBlock language="python">{`import pandas as pd
+import numpy as np
+from scipy.stats import spearmanr
+
+def rolling_correlation(r1: pd.Series, r2: pd.Series,
+                        window: int = 60) -> pd.Series:
+    """Rolling Pearson correlation between two return series."""
+    return r1.rolling(window).corr(r2)
+
+def conditional_correlation(returns: pd.DataFrame,
+                            stress_threshold: float = -0.02) -> dict:
+    """
+    Compare correlation matrices during stress vs. calm periods.
+    Stress defined as days when the first asset falls more than threshold.
+    """
+    log_ret = np.log(returns / returns.shift(1)).dropna()
+    stress_mask = log_ret.iloc[:, 0] < stress_threshold
+    calm_mask   = ~stress_mask
+
+    corr_stress = log_ret[stress_mask].corr()
+    corr_calm   = log_ret[calm_mask].corr()
+
+    return {"stress": corr_stress, "calm": corr_calm,
+            "n_stress": stress_mask.sum(), "n_calm": calm_mask.sum()}
+
+results = conditional_correlation(assets)
+print("Stress correlation (avg off-diag):",
+      results["stress"].values[np.triu_indices(5, k=1)].mean().round(3))
+print("Calm correlation (avg off-diag):",
+      results["calm"].values[np.triu_indices(5, k=1)].mean().round(3))
+
+# Spearman rank correlation (robust to fat tails)
+spear_corr, _ = spearmanr(np.log(assets / assets.shift(1)).dropna())
+print("Spearman correlation matrix:")
+print(pd.DataFrame(spear_corr, index=assets.columns, columns=assets.columns).round(2))
+`}</CodeBlock>
+
+<Callout type="note">
+**Take-away:** Correlation heatmaps are a snapshot at a point in time. In production systems, re-estimate covariance on a rolling basis (60–252 days), apply shrinkage, and monitor for regime shifts using conditional correlation or dynamic conditional correlation (DCC-GARCH) models.
+</Callout>

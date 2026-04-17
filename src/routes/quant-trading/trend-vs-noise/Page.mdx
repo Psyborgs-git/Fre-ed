@@ -1,0 +1,148 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## Signal and noise
+
+Every price series you will ever analyse is a mixture of **signal** — persistent, directional information — and **noise** — random fluctuations with no predictive value. The art of quantitative analysis is separating the two.
+
+The 3D scene starts by showing the raw price series (amber) in all its noisy glory. Scroll forward and the underlying trend (cyan) emerges as the noise fades. This is not magic — it is the mathematical structure that was always there, hidden behind the chaos.
+
+<Callout type="note">
+Scroll slowly through the scene. At low scroll the noisy signal dominates; by 75% scroll the clean linear trend has come forward and the noise has dimmed — just as smoothing does to a price series.
+</Callout>
+
+## What is a trend?
+
+A **trend** is a persistent directional component in a time series. Formally, a time series $P_t$ can be decomposed:
+
+$$
+P_t = T_t + C_t + \varepsilon_t
+$$
+
+where:
+- $T_t$ = trend component (slow, directional)
+- $C_t$ = cyclical/seasonal component (medium-frequency oscillation)
+- $\varepsilon_t$ = noise/residual (random, unpredictable)
+
+In the scene, the cyan line represents $T_t$ (a linear trend), while the amber line represents $P_t = T_t + C_t + \varepsilon_t$.
+
+## Smoothing — extracting signal
+
+The simplest extraction tool is a moving average (see the Moving Averages lesson). But we can also use regression:
+
+<CodeBlock language="python">{`import numpy as np
+import pandas as pd
+from scipy import signal
+
+# Generate the same deterministic series used in the scene
+N = 60
+i = np.arange(N)
+trend  = 0.03 * i - 0.9
+cycle  = 0.4 * np.sin(i * 0.3)
+noise  = 0.25 * np.sin(i * 2.7 + 1.3) + 0.15 * np.sin(i * 4.1 + 0.7)
+raw    = trend + cycle + noise
+
+# Method 1: linear regression to extract trend
+coeffs = np.polyfit(i, raw, deg=1)
+trend_fit = np.polyval(coeffs, i)
+
+# Method 2: Savitzky-Golay filter (preserves peaks/valleys better than MA)
+smoothed = signal.savgol_filter(raw, window_length=11, polyorder=2)
+
+# Method 3: Hodrick-Prescott filter (common in macro finance)
+# pip install statsmodels
+from statsmodels.tsa.filters.hp_filter import hpfilter
+cycle_hp, trend_hp = hpfilter(raw, lamb=1600)
+
+print(f"Linear trend slope: {coeffs[0]:.4f} per period")
+`}</CodeBlock>
+
+## Autocorrelation and memory
+
+A key diagnostic for trend vs noise is **autocorrelation** — does today's move predict tomorrow's?
+
+$$
+\rho_k = \text{Corr}(P_t, P_{t-k}) = \frac{\mathbb{E}[(P_t - \mu)(P_{t-k} - \mu)]}{\sigma^2}
+$$
+
+- $\rho_k \approx 0$ for all $k > 0$ → pure noise (random walk)
+- $\rho_1 > 0$ → positive autocorrelation → **momentum** / trending behaviour
+- $\rho_1 < 0$ → negative autocorrelation → **mean reversion**
+
+<CodeBlock language="python">{`from statsmodels.graphics.tsaplots import plot_acf
+import matplotlib.pyplot as plt
+
+# Plot autocorrelation function
+fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+# Raw noisy signal — should show structure
+plot_acf(raw,      lags=20, ax=axes[0], title='Raw signal ACF')
+
+# Pure noise — should be near zero for all lags
+pure_noise = 0.25 * np.sin(i * 2.7 + 1.3) + 0.15 * np.sin(i * 4.1 + 0.7)
+plot_acf(pure_noise, lags=20, ax=axes[1], title='Noise ACF')
+
+plt.tight_layout()
+plt.savefig('acf_comparison.png')
+`}</CodeBlock>
+
+## Hurst exponent — is it trending?
+
+The **Hurst exponent** $H$ measures the degree of long-range dependence:
+
+$$
+\mathbb{E}[R(n)] \propto n^H
+$$
+
+where $R(n)$ is the rescaled range over a window of size $n$.
+
+| $H$ | Interpretation |
+|-----|---------------|
+| $H = 0.5$ | Random walk — no memory |
+| $H > 0.5$ | Trending / persistent (momentum) |
+| $H < 0.5$ | Mean-reverting / anti-persistent |
+
+Most equity indices have $H \approx 0.52$–$0.58$ over short horizons, indicating mild trending behaviour. Individual stocks often show $H$ closer to 0.5.
+
+<Callout type="tip">
+A strategy should be designed to **match the regime**: trend-following strategies work when $H > 0.5$; mean-reversion strategies work when $H < 0.5$. Mixing them blindly is a fast way to lose money in the wrong regime.
+</Callout>
+
+## Spectral decomposition
+
+Fourier analysis decomposes a signal into constituent frequencies — separating low-frequency trend from high-frequency noise:
+
+$$
+P_t = \sum_{k=0}^{N/2} \left[ A_k \cos\!\left(\frac{2\pi k t}{N}\right) + B_k \sin\!\left(\frac{2\pi k t}{N}\right) \right]
+$$
+
+Low-frequency components ($k$ small) carry trend. High-frequency components ($k$ large) carry noise. A **low-pass filter** keeps only the low frequencies:
+
+<CodeBlock language="python">{`# Spectral decomposition and low-pass filter
+fft_vals  = np.fft.rfft(raw)
+freqs     = np.fft.rfftfreq(N)
+
+# Zero out high-frequency components (noise floor)
+cutoff    = 0.15   # cycles per sample
+fft_filt  = fft_vals.copy()
+fft_filt[freqs > cutoff] = 0
+
+# Reconstruct filtered signal
+filtered  = np.fft.irfft(fft_filt, n=N)
+
+print(f"Spectral noise floor: {np.abs(fft_vals[freqs > cutoff]).mean():.4f}")
+`}</CodeBlock>
+
+## The noise floor
+
+In practice, the **noise floor** is the residual variance that cannot be explained by any signal. Every strategy has a signal-to-noise ratio:
+
+$$
+\text{SNR} = \frac{\text{Var}(T_t)}{\text{Var}(\varepsilon_t)}
+$$
+
+A low SNR means most of the price movement is noise — any strategy will be dominated by transaction costs and false signals. The highest-SNR signals in markets often disappear quickly as they are arbitraged away.
+
+<Callout type="warning">
+**Over-fitting is the noise floor problem in disguise.** A model with too many parameters will fit the noise as though it were signal — producing a high in-sample Sharpe ratio and near-zero out-of-sample performance.
+</Callout>

@@ -1,0 +1,148 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## What is a backtest?
+
+A **backtest** is a simulation that applies a trading strategy to historical data to estimate how it *would have* performed. It answers: "if I had run this strategy from 2010 to 2020, what would my equity curve look like?"
+
+The scene shows the equity curve (cyan line) of a simulated strategy with two embedded drawdown periods (red filled bars below the line). The dashed grey line marks the starting portfolio value. Scroll left-to-right to watch the curve build, and observe how the red drawdown area grows and recovers during each losing spell.
+
+<Callout type="note">
+A perfect-looking backtest is often a warning sign, not a green light. Every artefact that makes historical performance look better — look-ahead bias, survivorship bias, transaction cost neglect — disappears in live trading.
+</Callout>
+
+## The equity curve and drawdown
+
+Two fundamental outputs of any backtest are the **equity curve** and the **drawdown curve**:
+
+$$
+E_t = E_0 \prod_{k=1}^{t}(1 + r_k)
+$$
+
+$$
+\text{DD}_t = \frac{E_t - \max_{k \leq t} E_k}{\max_{k \leq t} E_k} \leq 0
+$$
+
+The drawdown $\text{DD}_t$ is always non-positive. The deepest point is the **maximum drawdown (MDD)**:
+
+$$
+\text{MDD} = \min_{t}\, \text{DD}_t
+$$
+
+The **drawdown duration** measures how long the portfolio spends underwater — the time from peak to new peak. Many traders find duration more psychologically challenging than depth.
+
+<CodeBlock language="python">{`import pandas as pd
+import numpy as np
+
+def backtest_metrics(returns: pd.Series,
+                     risk_free: float = 0.0,
+                     periods: int = 252) -> dict:
+    """Compute a comprehensive set of backtest metrics."""
+    equity = (1 + returns).cumprod()
+    peak   = equity.cummax()
+    dd     = (equity - peak) / peak
+
+    ann_ret = equity.iloc[-1] ** (periods / len(returns)) - 1
+    ann_vol = returns.std() * np.sqrt(periods)
+    mdd     = dd.min()
+
+    # Drawdown duration
+    in_dd = dd < 0
+    dd_duration = in_dd.groupby((~in_dd).cumsum()).sum().max()
+
+    # Sharpe
+    excess  = returns - risk_free / periods
+    sharpe  = (excess.mean() / excess.std()) * np.sqrt(periods)
+
+    # Calmar
+    calmar  = ann_ret / abs(mdd) if mdd != 0 else np.inf
+
+    return {
+        "ann_return": ann_ret,
+        "ann_vol":    ann_vol,
+        "max_drawdown": mdd,
+        "dd_duration_bars": dd_duration,
+        "sharpe": sharpe,
+        "calmar": calmar,
+    }
+
+# Example
+np.random.seed(7)
+r = pd.Series(np.random.normal(0.0005, 0.01, 252 * 5))
+metrics = backtest_metrics(r)
+for k, v in metrics.items():
+    print(f"{k:25s}: {v:.4f}")
+`}</CodeBlock>
+
+## Look-ahead bias and survivorship bias
+
+These two biases are the most common sources of backtesting optimism:
+
+### Look-ahead bias
+
+Look-ahead bias occurs when you use information at time $t$ that **was not available** until time $t + k$. Classic examples:
+
+- Using today's closing price to determine whether to execute a trade *at* today's close.
+- Rebalancing a portfolio using earnings announced after the market closed but timestamped to the open.
+- Fitting a z-score normaliser on the full dataset before splitting into train/test.
+
+<Callout type="warning">
+Always enforce a strict **information barrier**: all data used to generate signal at time $t$ must have been observable *before* the trade executes. Use `.shift(1)` in pandas to lag features by one bar.
+</Callout>
+
+### Survivorship bias
+
+If your historical universe only includes companies that still *exist* today, you are training on winners and ignoring all the firms that went bankrupt or were delisted. This inflates apparent returns.
+
+$$
+\text{Survivorship bias} \approx \overline{R}_{\text{alive}} - \overline{R}_{\text{all}}
+$$
+
+Empirically, survivorship bias inflates equity strategy returns by 1–3% per year for US equities. Use **point-in-time** (PIT) data vendors that preserve delisted securities.
+
+<CodeBlock language="python">{`import pandas as pd
+
+# Survivorship bias example
+# Simulate: 100 stocks at t=0, only 60 survive to t=T
+np.random.seed(42)
+n_stocks = 100
+n_survived = 60
+n_delisted = n_stocks - n_survived
+
+# Survivors have moderate positive returns
+survivor_returns = np.random.normal(0.08, 0.20, n_survived)
+# Delisted stocks have large negative returns (they failed)
+delisted_returns = np.random.normal(-0.60, 0.30, n_delisted)
+
+# Biased estimate (ignores delisted)
+biased_mean = survivor_returns.mean()
+# Unbiased estimate
+unbiased_mean = np.concatenate([survivor_returns, delisted_returns]).mean()
+
+print(f"Biased mean annual return:   {biased_mean:.1%}")
+print(f"Unbiased mean annual return: {unbiased_mean:.1%}")
+print(f"Survivorship bias:           {biased_mean - unbiased_mean:.1%}")
+`}</CodeBlock>
+
+## Walk-forward validation
+
+In-sample optimisation followed by out-of-sample testing is the gold standard for strategy validation. **Walk-forward analysis** automates this by sliding a window through the full history:
+
+$$
+\text{For each window } [t_{\text{start}}, t_{\text{end}}]:
+$$
+$$
+\underbrace{[t_{\text{start}},\ t_{\text{train}}]}_{\text{training: optimise params}} \quad \longrightarrow \quad \underbrace{[t_{\text{train}}+1,\ t_{\text{end}}]}_{\text{test: evaluate out-of-sample}}
+$$
+
+The out-of-sample results are concatenated to form the **walk-forward equity curve** — the best available estimate of live performance.
+
+| Split type | Description | When to use |
+|------------|-------------|-------------|
+| **Expanding** | Training set grows; test set is fixed length | Most common; all data used eventually |
+| **Rolling** | Both windows slide; training size is fixed | Stable parameter regimes |
+| **Purging + embargo** | Removes overlap between train/test for ML models | Any ML-based strategy |
+
+<Callout type="note">
+A strategy whose **in-sample Sharpe** is 2.0 but **out-of-sample Sharpe** is 0.3 is overfit. The gap between the two is the primary diagnostic. Aim for OOS Sharpe ≥ 50% of IS Sharpe.
+</Callout>

@@ -1,0 +1,168 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## How much should you risk?
+
+Position sizing is arguably the most important and least glamorous part of trading. A brilliant strategy with reckless sizing will ruin you. A mediocre strategy with disciplined sizing can be profitable. The 3D scene shows a **risk pyramid**: five bars of decreasing height, representing position sizes across five conviction tiers, coloured from green (highest confidence) to red (lowest). Drag the sliders to watch Kelly criterion reshape the pyramid.
+
+<Callout type="note">
+The red dashed line marks the maximum risk threshold. Any bar touching or exceeding it represents a position that risks more than your limit — a signal to scale down.
+</Callout>
+
+## The 1% rule
+
+The simplest and most widely used position sizing rule:
+
+$$
+\text{Position risk} \leq 1\% \times \text{Account equity}
+$$
+
+If your account is \$100,000, you risk at most \$1,000 per trade — the dollar distance from entry to stop-loss. This ensures that even a long losing streak cannot wipe you out.
+
+| Losing streak | % account lost (1% rule) |
+|---------------|--------------------------|
+| 5 losses       | 4.9% |
+| 10 losses      | 9.6% |
+| 20 losses      | 18.2% |
+| 50 losses      | 39.5% |
+
+Compare this to risking 10% per trade: 10 losses in a row = 65% drawdown.
+
+## Kelly criterion
+
+The **Kelly criterion** gives the fraction $f^*$ of capital to bet that maximises the long-run geometric growth rate:
+
+$$
+f^* = W - \frac{1 - W}{R}
+$$
+
+where:
+- $W$ = win rate (fraction of trades that profit)
+- $R$ = reward-to-risk ratio (average win / average loss)
+
+**Example:** $W = 0.55$, $R = 1.5$:
+
+$$
+f^* = 0.55 - \frac{0.45}{1.5} = 0.55 - 0.30 = 0.25
+$$
+
+So the full Kelly bet is 25% of capital — far more than most traders are comfortable with, and sensitive to errors in estimating $W$ and $R$.
+
+<CodeBlock language="python">{`def kelly_fraction(win_rate: float, reward_risk: float) -> float:
+    """Full Kelly fraction. Returns 0 if edge is negative."""
+    return max(0.0, win_rate - (1 - win_rate) / reward_risk)
+
+# Example: 55% win rate, 1.5:1 reward/risk
+f_full = kelly_fraction(win_rate=0.55, reward_risk=1.5)
+print(f"Full Kelly: {f_full:.2%}")     # 25.00%
+print(f"Half Kelly: {f_full/2:.2%}")   # 12.50%
+print(f"Quarter Kelly: {f_full/4:.2%}") # 6.25%
+`}</CodeBlock>
+
+## Risk of ruin
+
+**Risk of ruin** is the probability that your account drops below a threshold from which recovery is impractical (or impossible). It depends on your edge, position size, and drawdown tolerance:
+
+$$
+R = \left(\frac{1 - \text{edge}}{1 + \text{edge}}\right)^{N}
+$$
+
+where $\text{edge} = W \cdot (1+R) - 1$ and $N$ is the number of bet units until ruin.
+
+More practically, the ruin probability grows **exponentially** with bet size:
+
+<CodeBlock language="python">{`import numpy as np
+
+def risk_of_ruin(win_rate: float, reward_risk: float, fraction: float,
+                 n_units: int = 100) -> float:
+    """
+    Monte Carlo estimate of ruin probability.
+    'Ruin' = drawdown exceeds 50% of starting capital.
+    """
+    n_simulations = 10_000
+    starting_capital = 1.0
+    ruin_threshold   = 0.5   # 50% drawdown = ruin
+
+    ruin_count = 0
+    rng = np.random.default_rng(42)   # fixed seed for reproducibility
+
+    for _ in range(n_simulations):
+        capital = starting_capital
+        for _ in range(n_units):
+            if rng.random() < win_rate:
+                capital *= 1 + fraction * reward_risk
+            else:
+                capital *= 1 - fraction
+            if capital < ruin_threshold:
+                ruin_count += 1
+                break
+
+    return ruin_count / n_simulations
+
+# Compare full Kelly vs half Kelly vs quarter Kelly
+for label, frac in [('Full Kelly', 0.25), ('Half Kelly', 0.125), ('Quarter Kelly', 0.0625)]:
+    r = risk_of_ruin(win_rate=0.55, reward_risk=1.5, fraction=frac)
+    print(f"{label:15s}: ruin prob = {r:.1%}")
+`}</CodeBlock>
+
+## Fractional Kelly and practical sizing
+
+Full Kelly is theoretically optimal but practically dangerous because:
+
+1. **We never know the true $W$ and $R$** — estimates are noisy
+2. **Kelly bet sizes feel enormous** — hard to follow psychologically
+3. **Path dependence** — a run of losses at full Kelly can permanently impair your capital
+
+The standard professional practice is **half-Kelly** or **quarter-Kelly**:
+
+$$
+f_{\text{practical}} = \frac{f^*}{k}, \quad k \in \{2, 4\}
+$$
+
+This sacrifices some long-run growth rate in exchange for dramatically lower variance and ruin probability.
+
+<Callout type="tip">
+**The convex combination insight:** Over-betting (above full Kelly) reduces long-run wealth with certainty. Under-betting reduces it sublinearly. There is no symmetry — the downside of over-betting is far worse than the downside of under-betting by the same fraction.
+</Callout>
+
+## Putting it together
+
+A practical position sizing framework:
+
+<CodeBlock language="python">{`class PositionSizer:
+    def __init__(self, account_equity: float, max_risk_pct: float = 0.01):
+        self.equity       = account_equity
+        self.max_risk_pct = max_risk_pct   # never risk more than this per trade
+
+    def size(self, entry: float, stop: float, win_rate: float,
+             reward_risk: float, kelly_fraction: float = 0.5) -> dict:
+        """Compute position size in shares/contracts."""
+        dollar_risk_per_share = abs(entry - stop)
+        if dollar_risk_per_share == 0:
+            raise ValueError("Entry and stop cannot be equal")
+
+        # Kelly-based bet size, capped at max_risk_pct
+        kelly_f = kelly_fraction * max(0.0, win_rate - (1 - win_rate) / reward_risk)
+        applied_f = min(kelly_f, self.max_risk_pct)
+
+        dollar_risk = self.equity * applied_f
+        shares      = int(dollar_risk / dollar_risk_per_share)
+
+        return {
+            'shares':         shares,
+            'dollar_risk':    dollar_risk,
+            'kelly_f':        kelly_f,
+            'applied_f':      applied_f,
+            'max_loss':       shares * dollar_risk_per_share,
+        }
+
+# Example
+sizer  = PositionSizer(account_equity=100_000, max_risk_pct=0.01)
+result = sizer.size(entry=150.0, stop=147.0, win_rate=0.55, reward_risk=1.5)
+print(result)
+# {'shares': 333, 'dollar_risk': 1000.0, 'kelly_f': 0.125, 'applied_f': 0.01, ...}
+`}</CodeBlock>
+
+<Callout type="warning">
+Position sizing formulas assume **independence** between trades. In reality, correlated positions (e.g., long multiple tech stocks) act as a single large position. Always consider **portfolio-level risk**, not just per-trade risk.
+</Callout>

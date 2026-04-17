@@ -1,0 +1,145 @@
+import Callout from '../../../components/Callout.jsx';
+import CodeBlock from '../../../components/CodeBlock.jsx';
+
+## What is mean reversion?
+
+Financial markets oscillate between extremes. A stock, spread, or rate that has moved far above or below its historical average will — more often than not — drift back toward that average. This tendency is called **mean reversion**, and it is the foundation of an entire family of quantitative strategies.
+
+The 3D scene shows a violet price series oscillating around a cyan equilibrium line. Amber dashed lines mark the ±Z-threshold band. Green spheres appear where the price crosses *below* the lower band (long entry), and red spheres appear where price reverts back through the mean (exit). Use the Z-threshold slider to tighten or relax the entry rule and observe how signal frequency changes.
+
+<Callout type="note">
+Mean-reverting behaviour is empirically strongest in **spreads** (price of asset A minus hedge-adjusted price of B), not raw prices. Raw equity prices are closer to random walks — use spreads or ratios.
+</Callout>
+
+## The Z-score signal
+
+The z-score normalises the price (or spread) relative to its recent mean and standard deviation:
+
+$$
+z_t = \frac{P_t - \mu}{\sigma}
+$$
+
+where $\mu$ is the rolling mean over the look-back window and $\sigma$ is the rolling standard deviation. A z-score of $+2$ means the price is two standard deviations above its mean — statistically extreme if the series is normally distributed.
+
+Entry rules based on the z-score:
+
+$$
+\text{Signal}_t = \begin{cases}
++1 \text{ (long)}  & z_t < -z_{\text{threshold}} \\
+-1 \text{ (short)} & z_t > +z_{\text{threshold}} \\
+0 \text{ (flat)}   & |z_t| < z_{\text{exit}}
+\end{cases}
+$$
+
+A common parameterisation uses $z_{\text{threshold}} = 2.0$ for entry and $z_{\text{exit}} = 0.5$ for exit.
+
+<CodeBlock language="python">{`import pandas as pd
+import numpy as np
+
+def zscore(series: pd.Series, window: int = 30) -> pd.Series:
+    """Rolling z-score with given look-back window."""
+    mu = series.rolling(window).mean()
+    sigma = series.rolling(window).std()
+    return (series - mu) / sigma
+
+def mean_reversion_signals(
+    spread: pd.Series,
+    window: int = 30,
+    entry_z: float = 2.0,
+    exit_z: float = 0.5,
+) -> pd.Series:
+    """Return +1 (long), -1 (short), 0 (flat) for a mean-reverting spread."""
+    z = zscore(spread, window)
+    signal = pd.Series(0, index=spread.index)
+    position = 0
+    for i in range(len(z)):
+        if pd.isna(z.iloc[i]):
+            continue
+        if position == 0:
+            if z.iloc[i] < -entry_z:
+                position = 1   # go long
+            elif z.iloc[i] > entry_z:
+                position = -1  # go short
+        elif position == 1 and z.iloc[i] > -exit_z:
+            position = 0       # exit long
+        elif position == -1 and z.iloc[i] < exit_z:
+            position = 0       # exit short
+        signal.iloc[i] = position
+    return signal
+`}</CodeBlock>
+
+## Entry and exit rules
+
+The cleanest mean-reversion framework has four steps:
+
+1. **Spread formation** — choose two cointegrated assets or a single stationary series.
+2. **Normalisation** — compute a rolling z-score over a stable look-back window (typically 20–60 days).
+3. **Entry** — open a long when $z < -z_{\text{threshold}}$, short when $z > +z_{\text{threshold}}$.
+4. **Exit** — close the trade when the z-score reverts to within $\pm z_{\text{exit}}$ of zero.
+
+Stop-losses are essential. If the spread *diverges* instead of reverting, you must cut before the loss becomes catastrophic.
+
+<Callout type="warning">
+**Cointegration can break.** A pairs trade that worked for three years can fail permanently if the relationship between two companies changes (merger, regulatory shift, business-model divergence). Re-test cointegration regularly and halt trading when the Engle-Granger test rejects cointegration.
+</Callout>
+
+### Pairs trading: a preview
+
+Pairs trading implements mean reversion on the **spread** between two assets:
+
+$$
+S_t = P_t^A - \beta \cdot P_t^B
+$$
+
+where $\beta$ (the **hedge ratio**) is estimated via OLS regression. The Ornstein-Uhlenbeck (OU) process describes how this spread evolves:
+
+$$
+dS_t = \kappa (\mu - S_t)\, dt + \sigma\, dW_t
+$$
+
+$\kappa$ is the **mean-reversion speed** — the higher it is, the faster the spread snaps back. The half-life of mean reversion is $\tau_{1/2} = \ln(2) / \kappa$.
+
+<CodeBlock language="python">{`import numpy as np
+from scipy.optimize import minimize
+
+def estimate_ou_params(spread: np.ndarray, dt: float = 1.0):
+    """Estimate OU parameters kappa, mu, sigma via maximum likelihood."""
+    n = len(spread) - 1
+    sx  = np.sum(spread[:-1])
+    sy  = np.sum(spread[1:])
+    sxx = np.sum(spread[:-1] ** 2)
+    sxy = np.sum(spread[:-1] * spread[1:])
+    syy = np.sum(spread[1:]  ** 2)
+
+    mu  = (sy * sxx - sx * sxy) / (n * (sxx - sxy) - (sx ** 2 - sx * sy))
+    kappa = -np.log(
+        (sxy - mu * sx - mu * sy + n * mu ** 2) /
+        (sxx - 2 * mu * sx + n * mu ** 2)
+    ) / dt
+    a = np.exp(-kappa * dt)
+    sigma_sq = (syy - 2 * a * sxy + a**2 * sxx
+                - 2 * mu * (1 - a) * (sy - a * sx)
+                + n * mu**2 * (1 - a)**2) / n
+
+    half_life = np.log(2) / kappa
+    return {"kappa": kappa, "mu": mu, "sigma": np.sqrt(sigma_sq),
+            "half_life_days": half_life}
+
+# Example
+spread = np.array([0.1, 0.3, -0.2, -0.5, -0.1, 0.4, 0.2, -0.3, 0.0, 0.1])
+params = estimate_ou_params(spread)
+print(f"Half-life: {params['half_life_days']:.1f} days")
+`}</CodeBlock>
+
+## Edge persistence
+
+Mean-reversion edges erode over time as more capital flows into the strategy. Key risk factors:
+
+| Risk | Description | Mitigation |
+|------|-------------|------------|
+| **Regime shift** | Cointegration breaks permanently | Rolling Engle-Granger test; halt if p > 0.05 |
+| **Liquidity** | Large positions move the spread | Trade only liquid names; size by ADV fraction |
+| **Momentum blowout** | Spread diverges before reverting | Hard stop at 3–4σ |
+| **Crowding** | Many funds trading the same pair | Monitor correlation of your PnL with known stat-arb funds |
+
+The half-life $\tau_{1/2}$ is the key diagnostic for edge persistence: if it lengthens steadily quarter-over-quarter, the opportunity is decaying. A half-life exceeding the trading horizon (e.g., 20 days for a daily rebalance) makes the strategy economically marginal after costs.

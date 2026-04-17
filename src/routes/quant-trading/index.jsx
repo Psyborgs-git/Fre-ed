@@ -1,201 +1,162 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { COMING_SOON_QUANT_LESSONS, LIVE_QUANT_LESSONS } from './registry.js';
 
-const QUANT_TOPICS = [
-  {
-    category: 'Mathematics Foundations',
-    color: '#a78bfa',
-    topics: [
-      { id: 'stochastic-calculus', title: 'Stochastic Calculus & Itô\'s Lemma', description: 'Brownian motion, Wiener processes, stochastic differential equations, and Itô\'s formula — the mathematical language of asset prices.' },
-      { id: 'probability-stats', title: 'Probability & Statistical Inference', description: 'Distributions, moment generating functions, hypothesis testing, MLE, Bayesian inference applied to market data.' },
-      { id: 'linear-algebra-quant', title: 'Linear Algebra for Portfolio Theory', description: 'Covariance matrices, eigendecomposition, PCA for factor extraction, Cholesky decomposition for correlated asset simulation.' },
-      { id: 'time-series-analysis', title: 'Time Series Analysis', description: 'ARIMA, GARCH, VAR models, stationarity, autocorrelation, co-integration — the statistical toolkit for price series.' },
-      { id: 'optimization-theory', title: 'Optimisation Theory', description: 'Convex optimisation, Lagrange multipliers, KKT conditions — how mean-variance optimisation and risk-budgeting work mathematically.' },
-    ],
-  },
-  {
-    category: 'Market Microstructure',
-    color: '#22d3ee',
-    topics: [
-      { id: 'order-book', title: 'Order Book Mechanics', description: 'Limit order books, market orders, bid-ask spread, queue priority, and how price discovery emerges from order flow.' },
-      { id: 'market-impact', title: 'Market Impact & Execution Costs', description: 'Temporary vs permanent impact, Almgren-Chriss optimal execution, VWAP/TWAP algorithms, and transaction cost analysis.' },
-      { id: 'high-freq-trading', title: 'High-Frequency Trading Concepts', description: 'Latency arbitrage, co-location, market making, statistical arbitrage at tick frequency, and the arms race for speed.' },
-      { id: 'liquidity', title: 'Liquidity & Slippage', description: 'Measuring market depth, Kyle\'s lambda, Roll\'s spread estimator, and how liquidity risk affects strategy capacity.' },
-    ],
-  },
-  {
-    category: 'Asset Pricing',
-    color: '#f59e0b',
-    topics: [
-      { id: 'capm', title: 'CAPM & Factor Models', description: 'Capital Asset Pricing Model, beta, systematic vs idiosyncratic risk, Fama-French 3-factor and 5-factor models.' },
-      { id: 'efficient-market', title: 'Efficient Market Hypothesis', description: 'Weak, semi-strong, and strong forms. Market anomalies, alpha decay, and what "beating the market" actually means.' },
-      { id: 'options-pricing', title: 'Options Pricing: Black-Scholes & Beyond', description: 'Black-Scholes derivation, Greeks (delta, gamma, vega, theta), implied volatility, volatility smile and skew.' },
-      { id: 'term-structure', title: 'Fixed Income & Term Structure', description: 'Yield curves, duration and convexity, Nelson-Siegel model, bond pricing, and interest rate derivatives.' },
-      { id: 'crypto-defi', title: 'Crypto & DeFi Markets', description: 'AMM pricing (Uniswap x·y=k), impermanent loss, on-chain data as alpha signals, tokenomics and liquidity pools.' },
-    ],
-  },
-  {
-    category: 'Portfolio Construction',
-    color: '#34d399',
-    topics: [
-      { id: 'mean-variance', title: 'Mean-Variance Optimisation', description: 'Markowitz efficient frontier, minimum variance portfolio, maximum Sharpe ratio, and the limitations of classical MVO.' },
-      { id: 'risk-parity', title: 'Risk Parity & Factor Investing', description: 'Equal risk contribution, Bridgewater All Weather, smart beta, factor tilts (value, momentum, low-vol, quality).' },
-      { id: 'position-sizing', title: 'Position Sizing & Kelly Criterion', description: 'Full Kelly, fractional Kelly, bet sizing under uncertainty, risk of ruin, and practical implementation.' },
-      { id: 'drawdown-risk', title: 'Drawdown & Risk Management', description: 'Max drawdown, VaR, CVaR, Expected Shortfall, tail risk hedging, and stop-loss mechanics.' },
-      { id: 'rebalancing', title: 'Rebalancing & Transaction Costs', description: 'Calendar vs threshold rebalancing, tax-loss harvesting, turnover constraints in portfolio optimisation.' },
-    ],
-  },
-  {
-    category: 'Quantitative Strategies',
-    color: '#f43f5e',
-    topics: [
-      { id: 'momentum', title: 'Momentum Strategies', description: 'Time-series vs cross-sectional momentum, look-back periods, Jegadeesh-Titman, momentum crashes, and factor construction.' },
-      { id: 'mean-reversion', title: 'Mean-Reversion & Statistical Arbitrage', description: 'Pairs trading, cointegration (Engle-Granger), Ornstein-Uhlenbeck process, z-score entry/exit signals.' },
-      { id: 'trend-following', title: 'Trend Following & CTAs', description: 'Moving average crossovers, Donchian channels, ATR-based sizing, correlation across asset classes, CTA performance.' },
-      { id: 'vol-strategies', title: 'Volatility Strategies', description: 'Volatility risk premium, VIX futures roll, dispersion trading, variance swaps, and realised-vs-implied vol arbitrage.' },
-      { id: 'ml-quant', title: 'Machine Learning in Quant Finance', description: 'Feature engineering from OHLCV data, gradient boosting for alpha signals, LSTM for time series, reinforcement learning for execution.' },
-      { id: 'alt-data', title: 'Alternative Data & Signal Generation', description: 'Satellite imagery, credit card data, sentiment from earnings calls, web scraping, ESG signals as alpha.' },
-    ],
-  },
-  {
-    category: 'Backtesting & Research',
-    color: '#818cf8',
-    topics: [
-      { id: 'backtesting-fundamentals', title: 'Backtesting Fundamentals', description: 'Walk-forward testing, in-sample vs out-of-sample splits, avoiding look-ahead bias, survivorship bias correction.' },
-      { id: 'performance-metrics', title: 'Performance Metrics', description: 'Sharpe ratio, Sortino ratio, Calmar ratio, information ratio, alpha/beta attribution, maximum drawdown.' },
-      { id: 'overfitting-finance', title: 'Overfitting in Finance', description: 'The multiple comparisons problem, deflated Sharpe ratio (Lopez de Prado), combinatorial purged cross-validation.' },
-      { id: 'transaction-costs-bt', title: 'Transaction Cost Modelling', description: 'Realistic slippage models, bid-ask spread estimation, market impact in backtests, capacity analysis.' },
-      { id: 'regime-detection', title: 'Market Regime Detection', description: 'Hidden Markov Models for regime switching, volatility regimes, bull/bear classification, regime-conditional strategies.' },
-    ],
-  },
-  {
-    category: 'Risk & Derivatives',
-    color: '#fb923c',
-    topics: [
-      { id: 'greeks-hedging', title: 'Greeks & Dynamic Hedging', description: 'Delta hedging, gamma scalping, vega exposure, theta decay — continuously maintaining a hedged options book.' },
-      { id: 'var-models', title: 'VaR & Stress Testing', description: 'Historical simulation, parametric VaR, Monte Carlo VaR, stressed VaR, and regulatory frameworks (Basel III).' },
-      { id: 'credit-risk', title: 'Credit Risk & CDS', description: 'Credit default swaps, probability of default, recovery rates, Merton model, CDO structuring basics.' },
-      { id: 'monte-carlo', title: 'Monte Carlo Simulation', description: 'Path simulation, variance reduction (antithetic, control variates), quasi-Monte Carlo, and option pricing via simulation.' },
-    ],
-  },
-];
+const STAGE_META = {
+  beginner:     { label: 'Beginner',     color: '#34d399', bg: 'bg-[#34d399]/10', border: 'border-[#34d399]/30', text: 'text-[#34d399]' },
+  intermediate: { label: 'Intermediate', color: '#22d3ee', bg: 'bg-[#22d3ee]/10', border: 'border-[#22d3ee]/30', text: 'text-[#22d3ee]' },
+  expert:       { label: 'Expert',       color: '#a78bfa', bg: 'bg-[#a78bfa]/10', border: 'border-[#a78bfa]/30', text: 'text-[#a78bfa]' },
+};
 
-function TopicRow({ topic, done, onToggle }) {
+const STAGE_ORDER = ['beginner', 'intermediate', 'expert'];
+
+function StageBadge({ stage }) {
+  const s = STAGE_META[stage] ?? STAGE_META.beginner;
   return (
-    <li className="quant-topic-row">
-      <button
-        type="button"
-        className={`quant-checkbox${done ? ' quant-checkbox--done' : ''}`}
-        onClick={() => onToggle(topic.id)}
-        aria-label={done ? `Mark "${topic.title}" as pending` : `Mark "${topic.title}" as done`}
-      >
-        {done && (
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <polyline points="2,6 5,9 10,3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </button>
-      <div className="quant-topic-text">
-        <p className={`quant-topic-title${done ? ' quant-topic-title--done' : ''}`}>{topic.title}</p>
-        <p className="quant-topic-desc">{topic.description}</p>
-      </div>
-    </li>
+    <span className={`text-xs px-2 py-0.5 rounded-full border ${s.bg} ${s.border} ${s.text}`}>
+      {s.label}
+    </span>
   );
 }
 
-function CategorySection({ category, color, topics, doneSet, onToggle }) {
-  const doneCount = topics.filter((t) => doneSet.has(t.id)).length;
-  const allDone = doneCount === topics.length;
-
+function LessonCard({ path, meta }) {
   return (
-    <section className="quant-category">
-      <div className="quant-category-header">
-        <span className="quant-category-dot" style={{ background: color }} />
-        <h2 className="quant-category-title" style={{ color }}>{category}</h2>
-        <span className="quant-category-count" style={{ color }}>
-          {doneCount}/{topics.length}
+    <Link
+      to={path}
+      className="group relative bg-bg-elev border border-line rounded-xl p-6 no-underline hover:border-accent-cyan/50 cursor-pointer transition-all duration-200"
+    >
+      <div className="absolute top-4 right-4">
+        <StageBadge stage={meta.stage} />
+      </div>
+
+      <h3 className="font-display font-semibold mb-2 leading-snug text-ink-hi group-hover:text-accent-cyan transition-colors pr-20">
+        {meta.title}
+      </h3>
+
+      <p className="text-ink-lo text-sm leading-relaxed mb-4">{meta.description}</p>
+
+      <div className="flex flex-wrap gap-1.5">
+        {meta.tags.map((tag) => (
+          <span
+            key={tag}
+            className="text-xs px-2 py-0.5 rounded-full border border-line text-ink-lo bg-bg-base"
+          >
+            #{tag}
+          </span>
+        ))}
+      </div>
+    </Link>
+  );
+}
+
+function ComingSoonCard({ path, title, desc, tags }) {
+  return (
+    <div className="relative bg-bg-elev border border-line rounded-xl p-6 opacity-60 cursor-default">
+      <span className="absolute top-4 right-4 text-xs px-2 py-0.5 rounded-full border bg-bg-base text-ink-lo border-line">
+        Soon
+      </span>
+      <h3 className="font-display font-semibold mb-2 leading-snug text-ink-lo pr-16">{title}</h3>
+      <p className="text-ink-lo text-sm leading-relaxed mb-4">{desc}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            className="text-xs px-2 py-0.5 rounded-full border border-line text-ink-lo bg-bg-base"
+          >
+            #{tag}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StageSection({ stage, lessons }) {
+  const s = STAGE_META[stage];
+  if (!lessons.length) return null;
+  return (
+    <section className="mb-14">
+      <div className="flex items-center gap-3 mb-6">
+        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
+        <h2 className="font-display font-bold text-xl" style={{ color: s.color }}>
+          {s.label}
+        </h2>
+        <span className="text-ink-lo text-sm">
+          {lessons.length} lesson{lessons.length !== 1 ? 's' : ''}
         </span>
       </div>
-      <ul className="quant-topic-list">
-        {topics.map((topic) => (
-          <TopicRow
-            key={topic.id}
-            topic={topic}
-            done={doneSet.has(topic.id)}
-            onToggle={onToggle}
-          />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {lessons.map(({ path, meta }) => (
+          <LessonCard key={path} path={path} meta={meta} />
         ))}
-      </ul>
+      </div>
     </section>
   );
 }
 
-export default function QuantTradingTodo() {
-  const [doneSet, setDoneSet] = useState(() => {
-    try {
-      const saved = localStorage.getItem('quant-todo-done');
-      return new Set(saved ? JSON.parse(saved) : []);
-    } catch {
-      return new Set();
-    }
-  });
+export default function QuantTradingHub() {
+  const byStage = STAGE_ORDER.reduce((acc, stage) => {
+    acc[stage] = LIVE_QUANT_LESSONS.filter(({ meta }) => meta.stage === stage);
+    return acc;
+  }, {});
 
-  const toggleDone = (id) => {
-    setDoneSet((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      try {
-        localStorage.setItem('quant-todo-done', JSON.stringify([...next]));
-      } catch {}
-      return next;
-    });
-  };
-
-  const totalTopics = QUANT_TOPICS.reduce((s, c) => s + c.topics.length, 0);
-  const totalDone   = doneSet.size;
-  const pct = Math.round((totalDone / totalTopics) * 100);
+  const totalLive = LIVE_QUANT_LESSONS.length;
 
   return (
-    <div className="quant-todo-page">
-      {/* Hero */}
-      <div className="quant-todo-hero">
-        <p className="quant-todo-kicker">Blog roadmap</p>
-        <h1 className="quant-todo-heading">Quant Trading Fundamentals</h1>
-        <p className="quant-todo-sub">
-          Every concept you need to understand quantitative trading — from stochastic calculus
-          to live strategy deployment. Check off topics as interactive lessons are published.
-        </p>
-
-        {/* Progress bar */}
-        <div className="quant-progress-wrap" aria-label={`${pct}% of topics published`}>
-          <div className="quant-progress-bar">
-            <div className="quant-progress-fill" style={{ width: `${pct}%` }} />
+    <div className="min-h-screen bg-bg-base pt-14">
+      <div className="max-w-5xl mx-auto px-4 pt-16 pb-20">
+        {/* Header */}
+        <header className="mb-14 max-w-2xl">
+          <p className="text-sm font-mono text-[#f59e0b] tracking-widest uppercase mb-3">
+            Quant Trading
+          </p>
+          <h1 className="text-4xl font-display font-bold leading-display mb-5 text-ink-hi">
+            Markets,{' '}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#34d399] to-[#22d3ee]">
+              made walkable
+            </span>
+          </h1>
+          <p className="text-ink-lo leading-prose text-lg">
+            From candlestick anatomy to volatility surfaces — every quantitative trading concept
+            rendered as an interactive 3D world. Walk through price series, risk frameworks, and
+            strategy mechanics step by step.
+          </p>
+          <div className="mt-6 flex items-center gap-3 text-sm text-ink-lo">
+            <span className="font-mono text-[#34d399]">{totalLive}</span>
+            <span>interactive lessons available</span>
           </div>
-          <span className="quant-progress-label">{totalDone} / {totalTopics} published</span>
+        </header>
+
+        {/* Stage legend */}
+        <div className="flex flex-wrap gap-4 mb-10">
+          {STAGE_ORDER.map((stage) => {
+            const s = STAGE_META[stage];
+            return (
+              <div key={stage} className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                <span className="text-xs text-ink-lo">{s.label}</span>
+              </div>
+            );
+          })}
         </div>
-      </div>
 
-      {/* Categories */}
-      <div className="quant-todo-grid">
-        {QUANT_TOPICS.map((cat) => (
-          <CategorySection
-            key={cat.category}
-            {...cat}
-            doneSet={doneSet}
-            onToggle={toggleDone}
-          />
+        {/* Live lessons by stage */}
+        {STAGE_ORDER.map((stage) => (
+          <StageSection key={stage} stage={stage} lessons={byStage[stage]} />
         ))}
-      </div>
 
-      <p className="quant-todo-footer-note">
-        Check off topics as you follow along — progress is saved in your browser.
-        New interactive lessons will unlock these topics over time.{' '}
-        <Link to="/blog" style={{ color: 'var(--accent-cyan)' }}>Browse existing lessons →</Link>
-      </p>
+        {/* Coming soon */}
+        <section>
+          <div className="flex items-center gap-3 mb-6">
+            <span className="w-2.5 h-2.5 rounded-full bg-ink-lo flex-shrink-0" />
+            <h2 className="font-display font-bold text-xl text-ink-lo">Coming Soon</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {COMING_SOON_QUANT_LESSONS.map((lesson) => (
+              <ComingSoonCard key={lesson.path} {...lesson} />
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
