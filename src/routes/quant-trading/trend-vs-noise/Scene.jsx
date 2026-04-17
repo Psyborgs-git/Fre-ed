@@ -104,7 +104,7 @@ function AnimatedTrendLine({ progressRef, reducedMotion }) {
           itemSize={3}
         />
       </bufferGeometry>
-      <lineBasicMaterial color="#22d3ee" transparent opacity={0} linewidth={3} />
+      <lineBasicMaterial color="#22d3ee" transparent opacity={0} lineWidth={3} />
     </line>
   );
 }
