@@ -32,7 +32,7 @@ import Diffusion from './routes/ai-ml/diffusion/index.jsx';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <ThemeProvider>
         <ScrollProvider>
           <Nav />
