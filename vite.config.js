@@ -7,6 +7,7 @@ import rehypeKatex from 'rehype-katex';
 import { resolve } from 'path';
 
 export default defineConfig({
+  base: process.env.BASE_PATH || '/',
   plugins: [
     // MDX must come before React plugin
     mdx({
